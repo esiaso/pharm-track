@@ -174,8 +174,11 @@ full REST surface in [openapi.json](api/openapi.json).
 1. **PPB HPT code format.** Validation is permissive (`^[A-Z0-9][A-Z0-9.\-/]{2,31}$`)
    until the official format is confirmed; set `HPT_CODE_PATTERN`. The real check
    is that the code exists in the imported HPT list.
-2. **PPB ADR export format.** `GET /adrs/:id/ppb-export` maps to the PPB suspected
-   ADR form fields; confirm against PPB's current e-reporting schema (or E2B R3).
+2. **PPB ADR export format and deadlines.** `GET /adrs/:id/ppb-export` and the batch
+   export (`POST /reports/adrs/ppb-batch`) map to the PPB suspected ADR form fields;
+   confirm against PPB's current e-reporting schema (or E2B R3). Submission is still
+   manual (download, send, enter PPB's reference). The reporting targets
+   (`ADR_SERIOUS_DAYS=7`, `ADR_NON_SERIOUS_DAYS=30`) are internal defaults to confirm.
 3. **CliniTrack and SupplyTrack endpoints.** The contracts in `docs/api` are
    PharmTrack's proposal; adjust the clients once those teams confirm.
 4. **SMS gateway.** `SMS_PROVIDER=http` posts a neutral payload; a provider-specific
@@ -191,5 +194,5 @@ full REST surface in [openapi.json](api/openapi.json).
 | 2. Integration hardening | SSO, event schemas with contract tests, idempotent writes, integrations screen with retry, SupplyTrack recalls and stock alerts | Done (contracts still to be confirmed with the CliniTrack and SupplyTrack teams; reservation expiry is on SupplyTrack's side) |
 | 3. Pharmacy web app | Verification screen with alerts and overrides, dispense screen with labels, returns, refill queue, patient safety records, formulary admin | Done (label printer formats still to come) |
 | 4. Clinical content | Tools to load and govern content: WHO ATC/DDD and PPB HPT releases (dry run, full releases retire codes, drugs needing re-coding), safety rule sets with second-pharmacist approval, facility formulary and drug master files, command-line import. See [CLINICAL-CONTENT.md](CLINICAL-CONTENT.md) | Done (the content itself, i.e. the official code lists and the interaction and dose rules, still has to be sourced and loaded) |
-| 5. Reporting | SHA/DHA extracts through CliniTrack, stock-out reporting with SupplyTrack, prescriber patterns, PPB ADR submission | Later |
+| 5. Reporting | Monthly pharmacy return (consumption with DDDs, antimicrobial use, refills, ADRs) submitted to CliniTrack for SHA/DHA with versions and amendments, stock-out episodes and monthly report to SupplyTrack, WHO prescribing indicators per prescriber, PPB ADR queue with deadlines and batch export, CSV downloads | Done (SHA/DHA and PPB formats still to be confirmed; ADR submission to PPB is a manual upload) |
 | 6. Standards | FHIR R4 facades (Medication, MedicationRequest, MedicationDispense, AllergyIntolerance, AdverseEvent), Kenya Data Protection Act review (retention, access logs, consent) | Later |

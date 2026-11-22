@@ -1,11 +1,11 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { AdverseDrugReaction, Allergy, Drug } from '@prisma/client';
 import { Actor } from '../common/auth';
 import { AuditService } from '../common/audit.service';
 import { atcLevel, normaliseAtc, normaliseHpt } from '../domain/codes';
 import { OutboxService } from '../integrations/outbox.service';
 import { PrismaService, Tx } from '../prisma/prisma.service';
-import { AssessAdrDto, CreateAdrDto, CreateAllergyDto, MarkAdrSubmittedDto, UpdateAllergyDto } from './records.dto';
+import { AssessAdrDto, CreateAdrDto, CreateAllergyDto, MarkAdrSubmittedDto, MarkAdrAcknowledgedDto, UpdateAllergyDto } from './records.dto';
 
 @Injectable()
 export class RecordsService {
@@ -163,6 +163,15 @@ export class RecordsService {
       data: { ppbReportStatus: 'SUBMITTED', ppbReference: dto.ppbReference },
     });
     await this.audit.log(this.prisma, actor, 'adr.submitted', 'AdverseDrugReaction', id, undefined, { ppbReference: dto.ppbReference });
+    return adr;
+  }
+
+  async markAdrAcknowledged(id: string, dto: MarkAdrAcknowledgedDto, actor: Actor) {
+    const before = await this.getAdr(id);
+    if (before.ppbReportStatus !== 'SUBMITTED') throw new ConflictException('Only a report marked as submitted to PPB can be acknowledged.');
+    const ppbReference = dto.ppbAcknowledgement ? `${before.ppbReference ?? ''}${before.ppbReference ? ' / ' : ''}${dto.ppbAcknowledgement}` : before.ppbReference;
+    const adr = await this.prisma.adverseDrugReaction.update({ where: { id }, data: { ppbReportStatus: 'ACKNOWLEDGED', ppbReference } });
+    await this.audit.log(this.prisma, actor, 'adr.acknowledged', 'AdverseDrugReaction', id, { ppbReportStatus: 'SUBMITTED' }, { ppbReportStatus: 'ACKNOWLEDGED', ppbAcknowledgement: dto.ppbAcknowledgement });
     return adr;
   }
 

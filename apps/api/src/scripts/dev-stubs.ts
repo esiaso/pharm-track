@@ -72,6 +72,11 @@ createServer(async (req, res) => {
     if (key) seen.set(key, {});
     return send(res, 200, {});
   }
+  if (req.method === 'POST' && url.pathname === '/api/v1/reports/stock-outs') {
+    const b = await body(req);
+    console.log(`[supplytrack] stock-out report ${b.facilityId} ${b.period} v${b.version}: ${b.items?.length ?? 0} items`);
+    return send(res, 202, { reference: `ST-SOR-${Date.now()}` });
+  }
   if (req.method === 'POST' && url.pathname === '/api/v1/stock/returns') {
     const b = await body(req);
     const batch = batchesFor(b.storeId, b.hptCode).find((x) => x.batchNumber === b.batchNumber);
@@ -90,7 +95,7 @@ createServer(async (req, res) => {
   if (req.method === 'POST' && url.pathname === '/api/v1/integrations/pharmtrack/events') {
     if (key && seen.has(key)) return send(res, 200, seen.get(key));
     const ev = await body(req);
-    const out = ev.type === 'dispense.completed' ? { reference: `CT-BILL-${String(++billSeq).padStart(5, '0')}` } : {};
+    const out = ev.type === 'dispense.completed' ? { reference: `CT-BILL-${String(++billSeq).padStart(5, '0')}` } : ev.type === 'report.submitted' ? { reference: `CT-RPT-${Date.now()}` } : {};
     console.log(`[CliniTrack] ${ev.type}`, ev.type === 'dispense.completed' ? `${ev.payload.lines.length} line(s) → ${out.reference}` : '');
     if (key) seen.set(key, out);
     return send(res, 200, out);

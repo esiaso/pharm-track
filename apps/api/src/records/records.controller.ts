@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { Actor, CurrentActor, Role, Roles } from '../common/auth';
-import { AssessAdrDto, CreateAdrDto, CreateAllergyDto, MarkAdrSubmittedDto, UpdateAllergyDto } from './records.dto';
+import { AssessAdrDto, CreateAdrDto, CreateAllergyDto, MarkAdrSubmittedDto, MarkAdrAcknowledgedDto, UpdateAllergyDto } from './records.dto';
 import { RecordsService } from './records.service';
 
 const CLINICAL = [Role.PRESCRIBER, Role.PHARMACIST, Role.SYSTEM];
@@ -57,5 +57,12 @@ export class RecordsController {
   @Roles(Role.PHARMACIST)
   submitted(@Param('id') id: string, @Body() dto: MarkAdrSubmittedDto, @CurrentActor() actor: Actor) {
     return this.service.markAdrSubmitted(id, dto, actor);
+  }
+
+  /** PPB has acknowledged the report (e.g. assigned its own case number). */
+  @Post('adrs/:id/ppb-acknowledged')
+  @Roles(Role.PHARMACIST)
+  acknowledged(@Param('id') id: string, @Body() dto: MarkAdrAcknowledgedDto, @CurrentActor() actor: Actor) {
+    return this.service.markAdrAcknowledged(id, dto, actor);
   }
 }

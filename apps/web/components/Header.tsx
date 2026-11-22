@@ -10,6 +10,7 @@ const NAV = [
   { href: '/refills', label: 'Refills' },
   { href: '/patients', label: 'Patients' },
   { href: '/formulary', label: 'Formulary' },
+  { href: '/reports', label: 'Reports', roles: ['PHARMACIST'] },
   { href: '/content', label: 'Clinical content', roles: ['PHARMACIST'] },
   { href: '/integrations', label: 'Integrations', roles: ['PHARMACIST'] },
 ];

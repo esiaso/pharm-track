@@ -1305,6 +1305,40 @@
         ]
       }
     },
+    "/api/v1/adrs/{id}/ppb-acknowledged": {
+      "post": {
+        "operationId": "RecordsController_acknowledged",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MarkAdrAcknowledgedDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "PPB has acknowledged the report (e.g. assigned its own case number).",
+        "tags": [
+          "patient-safety-records"
+        ]
+      }
+    },
     "/api/v1/prescriptions": {
       "post": {
         "operationId": "PrescriptionsController_receive",
@@ -2114,6 +2148,7 @@
             "name": "from",
             "required": false,
             "in": "query",
+            "description": "ISO date-time; defaults to 30 days before `to`.",
             "schema": {
               "type": "string"
             }
@@ -2122,14 +2157,35 @@
             "name": "to",
             "required": false,
             "in": "query",
+            "description": "ISO date-time; defaults to now.",
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "format",
+            "required": false,
+            "in": "query",
+            "description": "csv returns the main table as a CSV file.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "json",
+                "csv"
+              ]
             }
           }
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "tags": [
@@ -2153,6 +2209,7 @@
             "name": "from",
             "required": false,
             "in": "query",
+            "description": "ISO date-time; defaults to 30 days before `to`.",
             "schema": {
               "type": "string"
             }
@@ -2161,8 +2218,22 @@
             "name": "to",
             "required": false,
             "in": "query",
+            "description": "ISO date-time; defaults to now.",
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "format",
+            "required": false,
+            "in": "query",
+            "description": "csv returns the main table as a CSV file.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "json",
+                "csv"
+              ]
             }
           }
         ],
@@ -2204,7 +2275,7 @@
         "operationId": "ReportsController_overrides",
         "parameters": [
           {
-            "name": "from",
+            "name": "facilityId",
             "required": false,
             "in": "query",
             "schema": {
@@ -2212,7 +2283,160 @@
             }
           },
           {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "description": "ISO date-time; defaults to 30 days before `to`.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "to",
+            "required": false,
+            "in": "query",
+            "description": "ISO date-time; defaults to now.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "format",
+            "required": false,
+            "in": "query",
+            "description": "csv returns the main table as a CSV file.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "json",
+                "csv"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "reports"
+        ]
+      }
+    },
+    "/api/v1/reports/prescribing": {
+      "get": {
+        "operationId": "ReportsController_prescribing",
+        "parameters": [
+          {
+            "name": "facilityId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "description": "ISO date-time; defaults to 30 days before `to`.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "description": "ISO date-time; defaults to now.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "format",
+            "required": false,
+            "in": "query",
+            "description": "csv returns the main table as a CSV file.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "json",
+                "csv"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "reports"
+        ]
+      }
+    },
+    "/api/v1/reports/stock-outs": {
+      "get": {
+        "operationId": "ReportsController_stockOuts",
+        "parameters": [
+          {
+            "name": "facilityId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "description": "ISO date-time; defaults to 30 days before `to`.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "description": "ISO date-time; defaults to now.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "format",
+            "required": false,
+            "in": "query",
+            "description": "csv returns the main table as a CSV file.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "json",
+                "csv"
+              ]
+            }
+          },
+          {
+            "name": "storeId",
             "required": false,
             "in": "query",
             "schema": {
@@ -2230,6 +2454,225 @@
                 }
               }
             }
+          }
+        },
+        "tags": [
+          "reports"
+        ]
+      }
+    },
+    "/api/v1/reports/adrs/ppb-queue": {
+      "get": {
+        "operationId": "ReportsController_adrQueue",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "reports"
+        ]
+      }
+    },
+    "/api/v1/reports/adrs/ppb-batch": {
+      "post": {
+        "operationId": "ReportsController_adrBatch",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdrBatchDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "reports"
+        ]
+      }
+    },
+    "/api/v1/reports/runs": {
+      "get": {
+        "operationId": "ReportsController_runs",
+        "parameters": [
+          {
+            "name": "kind",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "PHARMACY_RETURN",
+                "STOCK_OUT"
+              ]
+            }
+          },
+          {
+            "name": "facilityId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "reports"
+        ]
+      },
+      "post": {
+        "operationId": "ReportsController_generate",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GenerateReportDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "reports"
+        ]
+      }
+    },
+    "/api/v1/reports/runs/{id}": {
+      "get": {
+        "operationId": "ReportsController_run",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "reports"
+        ]
+      },
+      "delete": {
+        "operationId": "ReportsController_discard",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "reports"
+        ]
+      }
+    },
+    "/api/v1/reports/runs/{id}/csv": {
+      "get": {
+        "operationId": "ReportsController_runCsv",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "reports"
+        ]
+      }
+    },
+    "/api/v1/reports/runs/{id}/submit": {
+      "post": {
+        "operationId": "ReportsController_submit",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubmitReportDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
           }
         },
         "tags": [
@@ -3033,6 +3476,15 @@
           "ppbReference"
         ]
       },
+      "MarkAdrAcknowledgedDto": {
+        "type": "object",
+        "properties": {
+          "ppbAcknowledgement": {
+            "type": "string",
+            "description": "PPB's own case or acknowledgement number, if it gave one. Kept with the submission reference."
+          }
+        }
+      },
       "PrescriptionItemDto": {
         "type": "object",
         "properties": {
@@ -3423,6 +3875,56 @@
         "required": [
           "lines"
         ]
+      },
+      "AdrBatchDto": {
+        "type": "object",
+        "properties": {
+          "adrIds": {
+            "minItems": 1,
+            "maxItems": 200,
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "adrIds"
+        ]
+      },
+      "GenerateReportDto": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "PHARMACY_RETURN",
+              "STOCK_OUT"
+            ]
+          },
+          "facilityId": {
+            "type": "string"
+          },
+          "period": {
+            "type": "string",
+            "description": "Calendar month in Nairobi time, e.g. \"2026-11\".",
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+          }
+        },
+        "required": [
+          "kind",
+          "facilityId",
+          "period"
+        ]
+      },
+      "SubmitReportDto": {
+        "type": "object",
+        "properties": {
+          "acknowledgeWarnings": {
+            "type": "boolean",
+            "description": "Needed when the report has data-quality warnings."
+          }
+        }
       }
     }
   }

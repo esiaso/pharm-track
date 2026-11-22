@@ -872,3 +872,63 @@ model AuditLog {
   @@index([entityType, entityId])
   @@index([actorId])
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Reporting (phase 5)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// One stock-out of an item in a store, from SupplyTrack's stock.out until
+/// stock.low or stock.restored. Gives stock-out days per period.
+model StockOutEpisode {
+  id        String    @id @default(uuid())
+  storeId   String
+  hptCode   String
+  startedAt DateTime
+  endedAt   DateTime?
+
+  @@index([storeId, hptCode])
+  @@index([startedAt])
+}
+
+/// A periodic report as generated and, once checked, submitted. The data is
+/// frozen at generation so what was sent can always be shown again.
+model ReportRun {
+  id           String        @id @default(uuid())
+  kind         ReportKind
+  facilityId   String
+  /// Calendar month, e.g. "2026-11" (Nairobi time).
+  period       String
+  periodFrom   DateTime
+  periodTo     DateTime
+  /// 1 for the first submission of a period, then 2, 3… for amendments.
+  version      Int
+  status       ReportStatus  @default(DRAFT)
+  data         Json
+  summary      Json
+  /// Data-quality findings shown before submission.
+  checks       Json
+  generatedBy  String
+  generatedAt  DateTime      @default(now())
+  submittedBy  String?
+  submittedAt  DateTime?
+  /// Reference returned by the receiving system.
+  externalRef  String?
+  /// The submitted run this one replaces.
+  amendsId     String?
+
+  @@index([kind, facilityId, period])
+}
+
+enum ReportKind {
+  /// Monthly pharmacy return (consumption, DDDs, antimicrobials, refills, ADRs) to CliniTrack, which forwards it to SHA/DHA.
+  PHARMACY_RETURN
+  /// Monthly stock-out report to SupplyTrack.
+  STOCK_OUT
+}
+
+enum ReportStatus {
+  DRAFT
+  SUBMITTED
+  /// A submitted run that a later amendment replaced.
+  SUPERSEDED
+}
