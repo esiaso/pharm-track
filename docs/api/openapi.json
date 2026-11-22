@@ -236,28 +236,454 @@
         ]
       }
     },
-    "/api/v1/safety/check": {
+    "/api/v1/content/templates/{kind}": {
+      "get": {
+        "operationId": "ContentController_template",
+        "parameters": [
+          {
+            "name": "kind",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "atc",
+                "hpt",
+                "interactions",
+                "contraindications",
+                "dose-limits",
+                "facility-formulary",
+                "drugs"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "content"
+        ]
+      }
+    },
+    "/api/v1/content/code-sets/imports": {
+      "get": {
+        "operationId": "ContentController_imports",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "content"
+        ]
+      }
+    },
+    "/api/v1/content/code-sets/imports/{id}": {
+      "get": {
+        "operationId": "ContentController_importDetail",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "content"
+        ]
+      }
+    },
+    "/api/v1/content/code-sets/drugs-needing-review": {
+      "get": {
+        "operationId": "ContentController_drugsNeedingReview",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "content"
+        ]
+      }
+    },
+    "/api/v1/content/code-sets/atc/import": {
       "post": {
-        "operationId": "SafetyController_check",
+        "operationId": "ContentController_importAtc",
         "parameters": [],
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/SafetyCheckDto"
+                "$ref": "#/components/schemas/CodeSetCsvImportDto"
               }
             }
           }
         },
         "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "content"
+        ]
+      }
+    },
+    "/api/v1/content/code-sets/hpt/import": {
+      "post": {
+        "operationId": "ContentController_importHpt",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CodeSetCsvImportDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "content"
+        ]
+      }
+    },
+    "/api/v1/content/rule-sets": {
+      "get": {
+        "operationId": "ContentController_ruleSets",
+        "parameters": [
+          {
+            "name": "kind",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "INTERACTION",
+                "CONTRAINDICATION",
+                "DOSE_LIMIT"
+              ]
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "DRAFT",
+                "ACTIVE",
+                "RETIRED"
+              ]
+            }
+          }
+        ],
+        "responses": {
           "200": {
             "description": ""
           }
         },
-        "summary": "Called by CliniTrack's prescription pad as lines are added, and before signing.",
         "tags": [
-          "safety"
+          "content"
+        ]
+      }
+    },
+    "/api/v1/content/rule-sets/import": {
+      "post": {
+        "operationId": "ContentController_importRuleSet",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RuleSetImportDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "content"
+        ]
+      }
+    },
+    "/api/v1/content/rule-sets/{id}": {
+      "get": {
+        "operationId": "ContentController_ruleSet",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "content"
+        ]
+      }
+    },
+    "/api/v1/content/rule-sets/{id}/export": {
+      "get": {
+        "operationId": "ContentController_exportRuleSet",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "content"
+        ]
+      }
+    },
+    "/api/v1/content/rule-sets/{id}/activate": {
+      "post": {
+        "operationId": "ContentController_activate",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "content"
+        ]
+      }
+    },
+    "/api/v1/content/rule-sets/{id}/retire": {
+      "post": {
+        "operationId": "ContentController_retire",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RetireRuleSetDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "content"
+        ]
+      }
+    },
+    "/api/v1/content/facilities/{facilityId}/formulary/export": {
+      "get": {
+        "operationId": "ContentController_exportFormulary",
+        "parameters": [
+          {
+            "name": "facilityId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "content"
+        ]
+      }
+    },
+    "/api/v1/content/facilities/{facilityId}/formulary/import": {
+      "post": {
+        "operationId": "ContentController_importFormulary",
+        "parameters": [
+          {
+            "name": "facilityId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FacilityFormularyImportDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "content"
+        ]
+      }
+    },
+    "/api/v1/content/drugs/import": {
+      "post": {
+        "operationId": "ContentController_importDrugs",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DrugMasterImportDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "content"
         ]
       }
     },
@@ -607,6 +1033,31 @@
         },
         "tags": [
           "formulary"
+        ]
+      }
+    },
+    "/api/v1/safety/check": {
+      "post": {
+        "operationId": "SafetyController_check",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SafetyCheckDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Called by CliniTrack's prescription pad as lines are added, and before signing.",
+        "tags": [
+          "safety"
         ]
       }
     },
@@ -1822,113 +2273,148 @@
           "payload"
         ]
       },
-      "DiagnosisDto": {
+      "CodeSetCsvImportDto": {
         "type": "object",
         "properties": {
-          "system": {
+          "release": {
+            "type": "string",
+            "description": "e.g. \"WHO-ATC-2026\" or \"PPB-HPT-2026-11\".",
+            "minLength": 2
+          },
+          "mode": {
+            "description": "FULL marks codes missing from this release as retired. Default PARTIAL.",
+            "enum": [
+              "FULL",
+              "PARTIAL"
+            ],
+            "type": "string"
+          },
+          "force": {
+            "type": "boolean",
+            "description": "Needed when a FULL release would retire more than a quarter of the loaded codes (usually a sign of the wrong file)."
+          },
+          "csv": {
+            "type": "string",
+            "description": "File contents (CSV, comma, semicolon or tab separated, UTF-8).",
+            "minLength": 1,
+            "maxLength": 20000000
+          },
+          "dryRun": {
+            "type": "boolean",
+            "description": "Validate and report what would change, without writing anything."
+          }
+        },
+        "required": [
+          "release",
+          "csv"
+        ]
+      },
+      "RuleSetImportDto": {
+        "type": "object",
+        "properties": {
+          "kind": {
             "type": "string",
             "enum": [
-              "ICD10",
-              "ICD11"
+              "INTERACTION",
+              "CONTRAINDICATION",
+              "DOSE_LIMIT"
             ]
           },
-          "code": {
+          "name": {
+            "type": "string",
+            "minLength": 2
+          },
+          "source": {
+            "type": "string",
+            "description": "Where the rules come from, e.g. \"Facility MTC\" or a knowledge base name. Activating a set retires the previous active set of the same kind and source.",
+            "minLength": 2
+          },
+          "version": {
+            "type": "string",
+            "minLength": 1
+          },
+          "notes": {
             "type": "string"
+          },
+          "csv": {
+            "type": "string",
+            "description": "File contents (CSV, comma, semicolon or tab separated, UTF-8).",
+            "minLength": 1,
+            "maxLength": 20000000
+          },
+          "dryRun": {
+            "type": "boolean",
+            "description": "Validate and report what would change, without writing anything."
           }
         },
         "required": [
-          "system",
-          "code"
+          "kind",
+          "name",
+          "source",
+          "version",
+          "csv"
         ]
       },
-      "ClinicalContextDto": {
+      "RetireRuleSetDto": {
         "type": "object",
         "properties": {
-          "ageMonths": {
-            "type": "number"
-          },
-          "weightKg": {
-            "type": "number"
-          },
-          "pregnant": {
-            "type": "boolean"
-          },
-          "lactating": {
-            "type": "boolean"
-          },
-          "crClMlMin": {
-            "type": "number"
-          },
-          "hepaticImpairment": {
-            "type": "boolean"
-          },
-          "diagnoses": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/DiagnosisDto"
-            }
-          }
-        }
-      },
-      "CheckItemDto": {
-        "type": "object",
-        "properties": {
-          "ref": {
+          "reason": {
             "type": "string",
-            "description": "Caller's reference for the line (echoed on alerts)."
-          },
-          "hptCode": {
-            "type": "string",
-            "description": "PPB HPT code: the drug's primary identifier."
-          },
-          "dose": {
-            "type": "number",
-            "minimum": 1
-          },
-          "doseUnit": {
-            "type": "string"
-          },
-          "frequencyPerDay": {
-            "type": "number",
-            "minimum": 1
-          },
-          "route": {
-            "type": "string"
+            "minLength": 5
           }
         },
         "required": [
-          "ref",
-          "hptCode",
-          "dose",
-          "doseUnit",
-          "frequencyPerDay",
-          "route"
+          "reason"
         ]
       },
-      "SafetyCheckDto": {
+      "FacilityFormularyImportDto": {
         "type": "object",
         "properties": {
-          "patientId": {
-            "type": "string"
+          "mode": {
+            "type": "string",
+            "description": "FULL removes this facility's entries that are not in the file (they fall back to the suite-wide status).",
+            "enum": [
+              "FULL",
+              "PARTIAL"
+            ]
           },
-          "facilityId": {
-            "type": "string"
+          "csv": {
+            "type": "string",
+            "description": "File contents (CSV, comma, semicolon or tab separated, UTF-8).",
+            "minLength": 1,
+            "maxLength": 20000000
           },
-          "context": {
-            "$ref": "#/components/schemas/ClinicalContextDto"
-          },
-          "items": {
-            "minItems": 1,
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/CheckItemDto"
-            }
+          "dryRun": {
+            "type": "boolean",
+            "description": "Validate and report what would change, without writing anything."
           }
         },
         "required": [
-          "patientId",
-          "context",
-          "items"
+          "csv"
+        ]
+      },
+      "DrugMasterImportDto": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "description": "Recorded on each drug's version history.",
+            "minLength": 3
+          },
+          "csv": {
+            "type": "string",
+            "description": "File contents (CSV, comma, semicolon or tab separated, UTF-8).",
+            "minLength": 1,
+            "maxLength": 20000000
+          },
+          "dryRun": {
+            "type": "boolean",
+            "description": "Validate and report what would change, without writing anything."
+          }
+        },
+        "required": [
+          "reason",
+          "csv"
         ]
       },
       "CreateDrugDto": {
@@ -2244,6 +2730,115 @@
         "required": [
           "release",
           "rows"
+        ]
+      },
+      "DiagnosisDto": {
+        "type": "object",
+        "properties": {
+          "system": {
+            "type": "string",
+            "enum": [
+              "ICD10",
+              "ICD11"
+            ]
+          },
+          "code": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "system",
+          "code"
+        ]
+      },
+      "ClinicalContextDto": {
+        "type": "object",
+        "properties": {
+          "ageMonths": {
+            "type": "number"
+          },
+          "weightKg": {
+            "type": "number"
+          },
+          "pregnant": {
+            "type": "boolean"
+          },
+          "lactating": {
+            "type": "boolean"
+          },
+          "crClMlMin": {
+            "type": "number"
+          },
+          "hepaticImpairment": {
+            "type": "boolean"
+          },
+          "diagnoses": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DiagnosisDto"
+            }
+          }
+        }
+      },
+      "CheckItemDto": {
+        "type": "object",
+        "properties": {
+          "ref": {
+            "type": "string",
+            "description": "Caller's reference for the line (echoed on alerts)."
+          },
+          "hptCode": {
+            "type": "string",
+            "description": "PPB HPT code: the drug's primary identifier."
+          },
+          "dose": {
+            "type": "number",
+            "minimum": 1
+          },
+          "doseUnit": {
+            "type": "string"
+          },
+          "frequencyPerDay": {
+            "type": "number",
+            "minimum": 1
+          },
+          "route": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "ref",
+          "hptCode",
+          "dose",
+          "doseUnit",
+          "frequencyPerDay",
+          "route"
+        ]
+      },
+      "SafetyCheckDto": {
+        "type": "object",
+        "properties": {
+          "patientId": {
+            "type": "string"
+          },
+          "facilityId": {
+            "type": "string"
+          },
+          "context": {
+            "$ref": "#/components/schemas/ClinicalContextDto"
+          },
+          "items": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CheckItemDto"
+            }
+          }
+        },
+        "required": [
+          "patientId",
+          "context",
+          "items"
         ]
       },
       "CreateAllergyDto": {

@@ -108,6 +108,7 @@ export class ContentService {
       known.add(r.code);
       accepted.push(r);
     }
+    errors.sort((a, b) => a.line - b.line);
 
     const created: typeof accepted = [];
     const changed: typeof accepted = [];

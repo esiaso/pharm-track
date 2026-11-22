@@ -95,3 +95,10 @@ button.link { border: 0; background: none; color: var(--accent); padding: 0; }
 }
 .print-only { display: none; }
 @media print { .print-only { display: grid; } }
+
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); overflow-x: auto; }
+.tabs button { border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; color: var(--muted); padding: 8px 12px; white-space: nowrap; }
+.tabs button[aria-selected='true'] { color: var(--fg); border-bottom-color: var(--ok-fg); font-weight: 600; }
+.stats { display: flex; flex-wrap: wrap; gap: 16px; }
+.stats strong { font-size: 18px; display: block; }
+.stack > h1, .stack > h2, .stack > h3, .stack > p, .card.stack > h3 { margin: 0; }

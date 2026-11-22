@@ -6,7 +6,8 @@ import { atcHierarchy, atcLevel } from '../domain/codes';
  *
  * The ATC codes are real WHO ATC codes. The HPT codes are PLACEHOLDERS
  * ("SAMPLE-HPT-xxxx"), not real PPB codes: load the official PPB HPT list
- * through POST /api/v1/formulary/code-sets/hpt for real use.
+ * through Clinical content → Code sets (POST /api/v1/content/code-sets/hpt/import)
+ * for real use. The sample safety rules are format examples, not clinical guidance.
  */
 const ATC_NAMES: Record<string, string> = {
   A: 'Alimentary tract and metabolism', A10: 'Drugs used in diabetes', A10B: 'Blood glucose lowering drugs, excl. insulins', A10BA: 'Biguanides', A10BA02: 'metformin',
