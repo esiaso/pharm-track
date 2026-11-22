@@ -3,7 +3,8 @@ import { Cron } from '@nestjs/schedule';
 import { Prisma } from '@prisma/client';
 import { Actor } from '../common/auth';
 import { AuditService } from '../common/audit.service';
-import { cutoff, REDACTED_SMS, RetentionPolicy, retentionFromEnv } from '../domain/retention';
+import { cutoff, MAX_PATIENTS_PER_RUN, REDACTED_SMS, RetentionPolicy, retentionFromEnv } from '../domain/retention';
+import { Tx } from '../prisma/prisma.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AccessLogQuery } from './privacy.dto';
 
@@ -13,6 +14,9 @@ export type RetentionCounts = {
   idempotencyRecords: number;
   contactDetails: number;
   accessLogRows: number;
+  auditLogRows: number;
+  /** Patients whose records were all removed (last activity past the retention period). */
+  patients: number;
 };
 
 /**
@@ -120,24 +124,27 @@ export class PrivacyService {
         OR: [{ phoneE164: { not: null } }, { firstName: { not: null } }],
       },
       access: { at: { lt: cutoff(now, p.accessLogDays) } },
+      audit: { at: { lt: cutoff(now, p.auditLogDays) } },
     } satisfies Record<string, unknown>;
   }
 
   /** What a run would remove now, without changing anything. */
   async retentionPreview(now = new Date()) {
     const f = this.filters(now);
-    const [smsContent, outboxPayloads, idempotencyRecords, contactDetails, accessLogRows] = await Promise.all([
+    const [smsContent, outboxPayloads, idempotencyRecords, contactDetails, accessLogRows, auditLogRows, patients] = await Promise.all([
       this.prisma.notification.count({ where: f.sms }),
       this.prisma.outboxEvent.count({ where: f.outbox }),
       this.prisma.inboxMessage.count({ where: f.inbox }),
       this.prisma.patientContactPreference.count({ where: f.contact }),
       this.prisma.patientAccessLog.count({ where: f.access }),
+      this.prisma.auditLog.count({ where: f.audit }),
+      this.expiredPatients(this.prisma, cutoff(now, this.policy.patientRecordsDays)).then((p) => p.length),
     ]);
     const lastRun = await this.prisma.retentionRun.findFirst({ orderBy: { startedAt: 'desc' } });
     return {
       enabled: process.env.RETENTION_ENABLED === 'true',
       policy: this.policy,
-      due: { smsContent, outboxPayloads, idempotencyRecords, contactDetails, accessLogRows } satisfies RetentionCounts,
+      due: { smsContent, outboxPayloads, idempotencyRecords, contactDetails, accessLogRows, auditLogRows, patients } satisfies RetentionCounts,
       lastRun,
     };
   }
@@ -150,18 +157,68 @@ export class PrivacyService {
       const inbox = await tx.inboxMessage.deleteMany({ where: f.inbox });
       const contact = await tx.patientContactPreference.updateMany({ where: f.contact, data: { phoneE164: null, firstName: null, erasedAt: now } });
       const access = await tx.patientAccessLog.deleteMany({ where: f.access });
+      const audit = await tx.auditLog.deleteMany({ where: f.audit });
+      const expired = (await this.expiredPatients(tx, cutoff(now, this.policy.patientRecordsDays))).slice(0, MAX_PATIENTS_PER_RUN);
+      await this.removePatients(tx, expired);
       const counts: RetentionCounts = {
         smsContent: sms.count,
         outboxPayloads: outbox.count,
         idempotencyRecords: inbox.count,
         contactDetails: contact.count,
         accessLogRows: access.count,
+        auditLogRows: audit.count,
+        patients: expired.length,
       };
       const run = await tx.retentionRun.create({ data: { trigger, actorId: actor?.id ?? null, results: { policy: { ...this.policy }, removed: counts } } });
       if (actor) await this.audit.log(tx, actor, 'retention.run', 'RetentionRun', run.id, undefined, counts);
       return { id: run.id, removed: counts };
     });
     return results;
+  }
+
+  /**
+   * Patients whose most recent activity in PharmTrack (prescription signed,
+   * dispensing, allergy or ADR recorded or changed, refill, SMS, contact
+   * update) is older than the cutoff.
+   */
+  private async expiredPatients(db: Tx | PrismaService, before: Date): Promise<string[]> {
+    const rows = await db.$queryRaw<{ patientId: string }[]>`
+      WITH activity AS (
+        SELECT "patientId", MAX("signedAt") AS at FROM "Prescription" GROUP BY 1
+        UNION ALL
+        SELECT p."patientId", MAX(l."dispensedAt") FROM "DispenseLine" l
+          JOIN "DispenseOrder" o ON o.id = l."dispenseOrderId"
+          JOIN "Prescription" p ON p.id = o."prescriptionId" GROUP BY 1
+        UNION ALL
+        SELECT "patientId", MAX("updatedAt") FROM "Allergy" GROUP BY 1
+        UNION ALL
+        SELECT "patientId", MAX("reportedAt") FROM "AdverseDrugReaction" GROUP BY 1
+        UNION ALL
+        SELECT "patientId", MAX("updatedAt") FROM "RefillSchedule" GROUP BY 1
+        UNION ALL
+        SELECT "patientId", MAX("createdAt") FROM "Notification" GROUP BY 1
+        UNION ALL
+        SELECT "patientId", MAX("updatedAt") FROM "PatientContactPreference" GROUP BY 1
+      )
+      SELECT "patientId" FROM activity GROUP BY "patientId" HAVING MAX(at) < ${before} ORDER BY MAX(at)`;
+    return rows.map((r) => r.patientId);
+  }
+
+  /** Deletes all of these patients' PharmTrack records (children first; there are no cascades). */
+  private async removePatients(tx: Tx, patientIds: string[]) {
+    if (!patientIds.length) return;
+    const ofPatients = { prescription: { patientId: { in: patientIds } } };
+    await tx.safetyAlert.deleteMany({ where: { prescriptionItem: ofPatients } });
+    await tx.controlledDrugRegisterEntry.deleteMany({ where: { patientId: { in: patientIds } } });
+    await tx.notification.deleteMany({ where: { patientId: { in: patientIds } } });
+    await tx.dispenseLine.deleteMany({ where: { dispenseOrder: ofPatients } });
+    await tx.dispenseOrder.deleteMany({ where: ofPatients });
+    await tx.refillSchedule.deleteMany({ where: { patientId: { in: patientIds } } });
+    await tx.prescriptionItem.deleteMany({ where: ofPatients });
+    await tx.prescription.deleteMany({ where: { patientId: { in: patientIds } } });
+    await tx.allergy.deleteMany({ where: { patientId: { in: patientIds } } });
+    await tx.adverseDrugReaction.deleteMany({ where: { patientId: { in: patientIds } } });
+    await tx.patientContactPreference.deleteMany({ where: { patientId: { in: patientIds } } });
   }
 
   /** Daily at 01:30 Nairobi time, when RETENTION_ENABLED=true. */
