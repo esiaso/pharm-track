@@ -2,7 +2,10 @@
 
 Status: **proposed by PharmTrack**, to be confirmed with the CliniTrack team.
 All drugs are identified by **PPB HPT code**, with the **WHO ATC code** alongside.
-Service calls use a SynergyOne service account with role `SYSTEM`.
+Service calls use a SynergyOne service account with role `SYSTEM` (an SSO
+bearer token, e.g. from the client credentials grant). Any write may carry
+`Idempotency-Key`; a retry with the same key and body returns the original
+response with header `idempotent-replay: true`, a different body gets `422`.
 
 ## A. CliniTrack calls PharmTrack
 
@@ -90,6 +93,10 @@ are retried with backoff; other `4xx` are not.
 | `dispense.returned` | Patient return | dispenseLineId, billingRef, hptCode, atcCode, quantity, unitPrice, reason |
 | `allergy.recorded` | Allergy recorded/changed in PharmTrack | allergyId, patientId, agentType, agentText, hptCode, atcCode, severity, verificationStatus, status |
 | `adr.reported` | ADR captured | adrId, patientId, encounterId, hptCode, atcCode, seriousness, onsetDate |
+
+The exact shape of the envelope and each payload is a JSON Schema in
+[`events/`](events) (`envelope.schema.json`, `dispense.completed.schema.json`, …).
+PharmTrack's tests check every event it sends against these schemas.
 
 ### `dispense.completed` (billing)
 

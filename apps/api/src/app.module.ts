@@ -1,9 +1,10 @@
 import { Controller, Get, Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ScheduleModule } from '@nestjs/schedule';
 import { AuditModule } from './common/audit.service';
 import { RolesGuard } from './common/auth';
+import { IdempotencyInterceptor } from './common/idempotency.interceptor';
 import { DispensingModule } from './dispensing/dispensing.module';
 import { FormularyModule } from './formulary/formulary.module';
 import { IntegrationsModule } from './integrations/integrations.module';
@@ -38,6 +39,9 @@ class HealthController {
     ReportsModule,
   ],
   controllers: [HealthController],
-  providers: [{ provide: APP_GUARD, useClass: RolesGuard }],
+  providers: [
+    { provide: APP_GUARD, useClass: RolesGuard },
+    { provide: APP_INTERCEPTOR, useClass: IdempotencyInterceptor },
+  ],
 })
 export class AppModule {}

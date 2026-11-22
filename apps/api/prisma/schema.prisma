@@ -726,14 +726,47 @@ enum OutboxStatus {
   DEAD
 }
 
-/// Inbound dedupe: every message received from CliniTrack/SupplyTrack is recorded
-/// by its idempotency key so redelivery has no effect.
+/// Inbound idempotency: a write from CliniTrack/SupplyTrack (or the web app) that
+/// carries an Idempotency-Key is recorded here with its response, so a retry gets
+/// the same answer instead of doing the work twice.
 model InboxMessage {
-  idempotencyKey String   @id
-  source         String
-  type           String
-  receivedAt     DateTime @default(now())
+  idempotencyKey String    @id
+  source         String // actor id of the caller
+  type           String // "METHOD /path"
+  requestHash    String?
+  responseStatus Int?
+  responseBody   Json?
+  receivedAt     DateTime  @default(now())
+  completedAt    DateTime?
   resultRef      String?
+}
+
+/// Batch recall notified by SupplyTrack. Dispense lines with this HPT code and
+/// batch identify the patients who received it.
+model BatchRecall {
+  id             String    @id @default(uuid())
+  hptCode        String
+  batchNumber    String
+  reason         String
+  recallClass    String? // e.g. CLASS_I, CLASS_II, CLASS_III
+  sourceRef      String?
+  receivedAt     DateTime  @default(now())
+  acknowledgedBy String?
+  acknowledgedAt DateTime?
+
+  @@unique([hptCode, batchNumber])
+}
+
+/// Stock status pushed by SupplyTrack (low / out / restored) per store and item.
+model StockAlert {
+  id        String   @id @default(uuid())
+  storeId   String
+  hptCode   String
+  status    String // LOW | OUT | RESTORED
+  quantity  Decimal?
+  updatedAt DateTime @updatedAt
+
+  @@unique([storeId, hptCode])
 }
 
 model AuditLog {

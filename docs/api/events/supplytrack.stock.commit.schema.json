@@ -1,0 +1,22 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://synergyone/pharmtrack/events/supplytrack.stock.commit.schema.json",
+  "type": "object",
+  "properties": {
+    "reservationId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "reference": {
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "reservationId",
+    "reference"
+  ],
+  "additionalProperties": false,
+  "description": "Sent as POST /reservations/{reservationId}/commit.",
+  "title": "stock.commit (outbox payload)"
+}

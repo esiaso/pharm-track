@@ -18,6 +18,7 @@ import { SupplyTrackClient } from '../src/integrations/supplytrack.client';
 import { NotificationsService } from '../src/refills/notifications.service';
 import { RefillsService } from '../src/refills/refills.service';
 import { seedSampleData } from '../src/seed/sample-data';
+import { contractErrors } from './contracts';
 
 const run = process.env.E2E_DATABASE_URL ? describe : describe.skip;
 if (process.env.E2E_DATABASE_URL) process.env.DATABASE_URL = process.env.E2E_DATABASE_URL;
@@ -314,5 +315,70 @@ run('PharmTrack end-to-end', () => {
     expect(met).toMatchObject({ atcCode: 'A10BA02', quantity: 120, refillQuantity: 60 });
     const amr = await api().get('/api/v1/reports/antimicrobial-use?facilityId=FAC-1').set(PHARMACIST).expect(200);
     expect(amr.body).toEqual([{ atcClass: 'J01CA', quantity: 14 }]);
+  });
+
+  it('replays a retried write with the same Idempotency-Key instead of doing it twice', async () => {
+    const body = { patientId: 'PAT-9', agentType: 'NON_DRUG', agentText: 'Latex', severity: 'MILD' };
+    const first = await api().post('/api/v1/allergies').set({ ...PHARMACIST, 'idempotency-key': 'alg-retry-1' }).send(body).expect(201);
+    const again = await api().post('/api/v1/allergies').set({ ...PHARMACIST, 'idempotency-key': 'alg-retry-1' }).send(body).expect(201);
+    expect(again.headers['idempotent-replay']).toBe('true');
+    expect(again.body.id).toBe(first.body.id);
+    expect(await prisma.allergy.count({ where: { patientId: 'PAT-9' } })).toBe(1);
+    await api().post('/api/v1/allergies').set({ ...PHARMACIST, 'idempotency-key': 'alg-retry-1' }).send({ ...body, agentText: 'Peanuts' }).expect(422);
+    // A failed request is forgotten, so the caller can fix it and retry with the same key.
+    await api().post('/api/v1/allergies').set({ ...PHARMACIST, 'idempotency-key': 'alg-retry-2' }).send({ ...body, severity: 'NOPE' }).expect(400);
+    await api().post('/api/v1/allergies').set({ ...PHARMACIST, 'idempotency-key': 'alg-retry-2' }).send({ ...body, agentText: 'Plaster' }).expect(201);
+  });
+
+  it('handles a SupplyTrack batch recall: lists affected patients and never dispenses the batch', async () => {
+    const ev = await api().post('/api/v1/integrations/supplytrack/events').set(SYSTEM)
+      .send({ type: 'batch.recalled', payload: { hptCode: 'SAMPLE-HPT-0002', batchNumber: 'SOON', reason: 'Out of specification dissolution', recallClass: 'CLASS_II' } })
+      .expect(200);
+    expect(ev.body.affectedPatients).toBeGreaterThan(0);
+    const recall = await api().get(`/api/v1/integrations/recalls/${ev.body.recallId}`).set(PHARMACIST).expect(200);
+    expect(recall.body.affected.map((a: any) => a.patientId)).toContain('PAT-1');
+
+    const rx = await api().post('/api/v1/prescriptions').set(SYSTEM)
+      .send(prescription({ patientId: 'PAT-6', items: [{ ref: 'L1', hptCode: 'SAMPLE-HPT-0002', atcCode: 'A10BA02', dose: 500, doseUnit: 'mg', frequency: 'BD', frequencyPerDay: 2, route: 'ORAL', durationDays: 30, quantity: 60 }] }))
+      .expect(201);
+    const id = rx.body.dispenseOrders[0].id;
+    await api().post(`/api/v1/dispensing/orders/${id}/verify`).set(PHARMACIST).send({}).expect(200);
+    const done = await api().post(`/api/v1/dispensing/orders/${id}/dispense`).set(PHARMACIST)
+      .send({ lines: [{ prescriptionItemId: rx.body.items[0].id, quantity: 60 }] })
+      .expect(200);
+    expect(done.body.lines.map((l: any) => l.batchNumber)).toEqual(['LATE']);
+
+    await api().post(`/api/v1/integrations/recalls/${ev.body.recallId}/acknowledge`).set(PHARMACIST).expect(200);
+    const open = await api().get('/api/v1/integrations/recalls?open=true').set(PHARMACIST).expect(200);
+    expect(open.body).toHaveLength(0);
+  });
+
+  it('records stock-out alerts from SupplyTrack and rejects malformed events', async () => {
+    await api().post('/api/v1/integrations/supplytrack/events').set(SYSTEM).send({ type: 'stock.out', payload: { storeId: 'STORE-1', hptCode: 'SAMPLE-HPT-0007' } }).expect(200);
+    await api().post('/api/v1/integrations/supplytrack/events').set(SYSTEM).send({ type: 'stock.out', payload: { hptCode: 'X' } }).expect(400);
+    await api().post('/api/v1/integrations/supplytrack/events').set(PHARMACIST).send({ type: 'stock.out', payload: {} }).expect(403);
+    const alerts = await api().get('/api/v1/integrations/stock-alerts?storeId=STORE-1').set(PHARMACIST).expect(200);
+    expect(alerts.body).toEqual([expect.objectContaining({ hptCode: 'SAMPLE-HPT-0007', status: 'OUT' })]);
+  });
+
+  it('shows the integration queue and lets an administrator retry a dead message', async () => {
+    const dead = await prisma.outboxEvent.create({
+      data: { destination: 'CLINITRACK', type: 'prescription.accepted', idempotencyKey: 'dead-1', payload: { prescriptionId: 'x' }, status: 'DEAD', attempts: 10, lastError: '400 bad request' },
+    });
+    const summary = await api().get('/api/v1/integrations/summary').set(PHARMACIST).expect(200);
+    expect(summary.body.outbox).toContainEqual({ destination: 'CLINITRACK', status: 'DEAD', count: 1 });
+    await api().post(`/api/v1/integrations/outbox/${dead.id}/retry`).set(PHARMACIST).expect(403);
+    const retried = await api().post(`/api/v1/integrations/outbox/${dead.id}/retry`).set(H('ADMINISTRATOR', 'admin')).expect(200);
+    expect(retried.body).toMatchObject({ status: 'PENDING', attempts: 0 });
+    await prisma.outboxEvent.delete({ where: { id: dead.id } });
+  });
+
+  it('only ever sends events that match the published contracts in docs/api/events', async () => {
+    await app.get(OutboxService).dispatchDue();
+    const types = new Set(clinitrack.events.map((e) => e.type));
+    expect([...types].sort()).toEqual(['allergy.recorded', 'dispense.completed', 'dispense.returned', 'drug.upserted', 'prescription.accepted']);
+    for (const e of clinitrack.events) expect(contractErrors(e.type, e.payload)).toEqual([]);
+    const supplyEvents = await prisma.outboxEvent.findMany({ where: { destination: 'SUPPLYTRACK' } });
+    for (const e of supplyEvents) expect(contractErrors(`supplytrack.${e.type}`, e.payload)).toEqual([]);
   });
 });

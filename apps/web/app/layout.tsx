@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Header } from '../components/Header';
+import { Header, SessionGate } from '../components/Header';
 import { SessionProvider } from '../lib/session';
 import './globals.css';
 
@@ -11,7 +11,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <body>
         <SessionProvider>
           <Header />
-          <main>{children}</main>
+          <main>
+            <SessionGate>{children}</SessionGate>
+          </main>
         </SessionProvider>
       </body>
     </html>

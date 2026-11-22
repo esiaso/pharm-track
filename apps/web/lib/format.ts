@@ -11,3 +11,6 @@ export function dateTime(v: string | null | undefined): string {
 }
 
 export const label = (s: string) => s.replace(/_/g, ' ').toLowerCase().replace(/^\w/, (c) => c.toUpperCase());
+
+/** Recall classes arrive as e.g. "CLASS_II"; show "Class II". */
+export const recallClass = (s: string) => s.replace(/^class[_\s-]*/i, 'Class ').toUpperCase().replace(/^CLASS /, 'Class ');

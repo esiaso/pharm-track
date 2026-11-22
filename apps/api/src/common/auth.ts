@@ -8,39 +8,43 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import { SsoVerifier, ssoConfigFromEnv } from './sso';
 
-export enum Role {
-  PRESCRIBER = 'PRESCRIBER',
-  PHARMACIST = 'PHARMACIST',
-  PHARMACY_TECHNICIAN = 'PHARMACY_TECHNICIAN',
-  STORE_KEEPER = 'STORE_KEEPER',
-  ADMINISTRATOR = 'ADMINISTRATOR',
-  /** Service-to-service calls from CliniTrack / SupplyTrack. */
-  SYSTEM = 'SYSTEM',
-}
-
-export interface Actor {
-  id: string;
-  roles: Role[];
-  facilityId?: string;
-}
+export { Role } from './roles';
+export type { Actor } from './roles';
+import { Actor, Role } from './roles';
 
 const ROLES_KEY = 'roles';
 export const Roles = (...roles: Role[]) => SetMetadata(ROLES_KEY, roles);
 
+let verifier: SsoVerifier | undefined;
+
+/** For tests: replace the SSO verifier. */
+export function setSsoVerifier(v: SsoVerifier | undefined) {
+  verifier = v;
+}
+
 /**
- * Resolves the caller. SynergyOne SSO token validation plugs in here.
+ * Resolves the caller.
  *
+ * AUTH_MODE=oidc (production): verifies the SynergyOne SSO bearer token.
  * AUTH_MODE=dev-headers (the default outside production) trusts x-user-id,
  * x-user-roles and x-facility-id headers so the API can be exercised locally.
- * main.ts refuses to start with that mode in production.
+ * main.ts refuses to start with dev-headers in production.
  */
-export function resolveActor(headers: Record<string, string | string[] | undefined>): Actor | null {
+export async function resolveActor(headers: Record<string, string | string[] | undefined>): Promise<Actor | null> {
   const mode = process.env.AUTH_MODE ?? 'dev-headers';
-  if (mode !== 'dev-headers') {
-    // TODO(SSO): verify the SynergyOne SSO bearer token and map its claims to Actor.
-    return null;
+  if (mode === 'oidc') {
+    const auth = headers['authorization'];
+    if (typeof auth !== 'string' || !auth.startsWith('Bearer ')) return null;
+    verifier ??= new SsoVerifier(ssoConfigFromEnv());
+    const actor = await verifier.verify(auth.slice(7).trim());
+    // A user may work across facilities; the token's facility wins, else the header picks one.
+    const facility = headers['x-facility-id'];
+    if (actor && !actor.facilityId && typeof facility === 'string') actor.facilityId = facility;
+    return actor;
   }
+  if (mode !== 'dev-headers') return null;
   const id = headers['x-user-id'];
   if (typeof id !== 'string' || !id) return null;
   const roles = String(headers['x-user-roles'] ?? '')
@@ -55,10 +59,10 @@ export function resolveActor(headers: Record<string, string | string[] | undefin
 export class RolesGuard implements CanActivate {
   constructor(private readonly reflector: Reflector) {}
 
-  canActivate(ctx: ExecutionContext): boolean {
+  async canActivate(ctx: ExecutionContext): Promise<boolean> {
     const req = ctx.switchToHttp().getRequest();
     if (req.path === '/health' || req.url?.startsWith('/docs')) return true;
-    const actor = resolveActor(req.headers);
+    const actor = await resolveActor(req.headers);
     if (!actor) throw new UnauthorizedException('Missing or invalid credentials.');
     req.actor = actor;
     const required = this.reflector.getAllAndOverride<Role[] | undefined>(ROLES_KEY, [ctx.getHandler(), ctx.getClass()]);
