@@ -138,6 +138,10 @@ export class NotificationsService {
     return pref;
   }
 
+  getContactPreference(patientId: string) {
+    return this.prisma.patientContactPreference.findUnique({ where: { patientId } });
+  }
+
   setFacilityProfile(facilityId: string, dto: FacilityProfileDto) {
     return this.prisma.facilityProfile.upsert({ where: { facilityId }, create: { facilityId, ...dto }, update: dto });
   }

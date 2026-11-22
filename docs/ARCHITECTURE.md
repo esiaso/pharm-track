@@ -25,7 +25,7 @@ systems. The **WHO ATC code** travels with it for classification and reporting.
 
 - **API**: NestJS 11 (`apps/api`), TypeScript, class-validator DTOs, Swagger at `/docs`.
 - **Database**: PostgreSQL via Prisma (`apps/api/prisma/schema.prisma`, migrations in `apps/api/prisma/migrations`).
-- **Web**: Next.js 15 (`apps/web`) for pharmacy staff: formulary, dispensing queue, refills. CliniTrack renders the prescription pad itself.
+- **Web**: Next.js 15 (`apps/web`) for pharmacy staff: dispensing (verify, dispense, labels, returns), refills, patient safety records, formulary. CliniTrack renders the prescription pad itself.
 - **Jobs**: `@nestjs/schedule` crons for the outbox dispatcher (10 s), SMS sender (1 min) and refill reminders (07:00 Africa/Nairobi).
 
 ### Code layout (`apps/api/src`)
@@ -160,9 +160,9 @@ full REST surface in [openapi.json](api/openapi.json).
 
 | Phase | Scope | Status |
 |---|---|---|
-| 1. Foundations | Data model, code sets, formulary, safety engine, prescriptions intake, dispensing with SupplyTrack and billing events, refills and SMS, ADRs, outbox, audit, e2e tests | **This PR** |
+| 1. Foundations | Data model, code sets, formulary, safety engine, prescriptions intake, dispensing with SupplyTrack and billing events, refills and SMS, ADRs, outbox, audit, e2e tests | Done |
 | 2. Integration hardening | Confirm contracts with CliniTrack and SupplyTrack, SSO, contract tests, dead-letter dashboard, SupplyTrack reservation expiry | Next |
-| 3. Pharmacy web app | Verification screen with alerts and overrides, dispense screen with batch view and label printing, refill queue actions, formulary admin | Next |
+| 3. Pharmacy web app | Verification screen with alerts and overrides, dispense screen with labels, returns, refill queue, patient safety records, formulary admin | Done (label printer formats and SSO sign-in still to come) |
 | 4. Clinical content | Load full WHO ATC and PPB HPT lists, interaction and dose-limit knowledge base, facility formularies | Needs data sources |
 | 5. Reporting | SHA/DHA extracts through CliniTrack, stock-out reporting with SupplyTrack, prescriber patterns, PPB ADR submission | Later |
 | 6. Standards | FHIR R4 facades (Medication, MedicationRequest, MedicationDispense, AllergyIntolerance, AdverseEvent), Kenya Data Protection Act review (retention, access logs, consent) | Later |

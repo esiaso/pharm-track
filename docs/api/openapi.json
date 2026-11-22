@@ -240,6 +240,34 @@
       }
     },
     "/api/v1/formulary/drugs/{id}/prices": {
+      "get": {
+        "operationId": "FormularyController_prices",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "formulary"
+        ]
+      },
       "post": {
         "operationId": "FormularyController_setPrice",
         "parameters": [
@@ -917,6 +945,27 @@
       }
     },
     "/api/v1/patients/{patientId}/contact-preferences": {
+      "get": {
+        "operationId": "RefillsController_getContact",
+        "parameters": [
+          {
+            "name": "patientId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "refills"
+        ]
+      },
       "put": {
         "operationId": "RefillsController_contact",
         "parameters": [
