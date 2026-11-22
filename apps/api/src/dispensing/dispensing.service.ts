@@ -9,6 +9,7 @@ import { allocateFefo, assertTransition, InvalidTransitionError, statusAfterDisp
 import { isEarlyRefill } from '../domain/refills';
 import type { SafetyAlert } from '../domain/types';
 import { FormularyService } from '../formulary/formulary.service';
+import { IntegrationsService } from '../integrations/integrations.service';
 import { OutboxService } from '../integrations/outbox.service';
 import { SupplyTrackClient } from '../integrations/supplytrack.client';
 import { num, PrismaService } from '../prisma/prisma.service';
@@ -33,6 +34,7 @@ export class DispensingService {
     private readonly formulary: FormularyService,
     private readonly refills: RefillsService,
     private readonly notifications: NotificationsService,
+    private readonly integrations: IntegrationsService,
   ) {}
 
   /** Dispensing queue for a pharmacy store: STAT first, then oldest. */
@@ -151,7 +153,9 @@ export class DispensingService {
           if (!req.witnessedBy) throw new BadRequestException(`${drug.genericName} is a controlled drug and needs a witness.`);
           if (req.witnessedBy === actor.id) throw new BadRequestException('The witness must be a different person from the dispenser.');
         }
-        const batches = await this.supply.getBatches(order.storeId, drug.hptCode);
+        // Never dispense a recalled batch, even if SupplyTrack still lists it.
+        const recalled = await this.integrations.recalledBatches(drug.hptCode);
+        const batches = (await this.supply.getBatches(order.storeId, drug.hptCode)).filter((b) => !recalled.has(b.batchNumber));
         const fefo = allocateFefo(batches, req.quantity, { minDaysToExpiry: item.durationDays });
         if (fefo.allocated === 0) throw new ConflictException(`${drug.genericName} (${drug.hptCode}) is out of stock in store ${order.storeId}.`);
         const reservation = await this.supply.reserve({

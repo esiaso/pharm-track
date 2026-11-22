@@ -1,0 +1,27 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://synergyone/pharmtrack/events/prescription.accepted.schema.json",
+  "type": "object",
+  "properties": {
+    "prescriptionId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "externalId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "enum": [
+        "QUEUED_FOR_DISPENSING"
+      ]
+    }
+  },
+  "required": [
+    "prescriptionId",
+    "externalId",
+    "status"
+  ],
+  "additionalProperties": false,
+  "title": "prescription.accepted"
+}

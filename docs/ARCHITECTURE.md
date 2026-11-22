@@ -126,17 +126,40 @@ and lactation, early refill. Every alert and override is stored in `SafetyAlert`
 ## Integration patterns
 
 - **Idempotency**: inbound prescriptions are keyed on CliniTrack's `externalId`;
-  outbound messages carry an `Idempotency-Key`.
+  outbound messages carry an `Idempotency-Key`. Any `POST`/`PUT`/`PATCH` to
+  PharmTrack may also send `Idempotency-Key`: a repeat with the same body
+  replays the stored response (header `idempotent-replay: true`), a repeat with
+  a different body gets `422`, and a repeat while the first is still running
+  gets `409`. Failed requests (4xx/5xx) are not stored, so they can be retried
+  with the same key. Keys are scoped to the caller.
 - **Transactional outbox**: events are written in the same transaction as the
   state change, then delivered with exponential backoff (30 s → 1 h, 10 attempts,
-  then `DEAD`). 4xx responses are not retried.
+  then `DEAD`). 4xx responses are not retried. The **Integrations** screen
+  (`GET /integrations/summary`, `/integrations/outbox`) shows waiting, failed and
+  dead messages; an administrator can retry one (`POST /integrations/outbox/:id/retry`),
+  which is audited and resets failed billing lines.
+- **Event contracts**: every event PharmTrack sends has a JSON Schema in
+  [`docs/api/events`](api/events). The e2e suite validates every CliniTrack event
+  and SupplyTrack payload it produces against them, so a change to a payload
+  fails CI until the schema (and the other team) agrees.
 - **Stock**: reserve synchronously (so we know we have it), deduct through the
   outbox. If the local transaction fails the reservation is released; SupplyTrack
   must also expire unconfirmed reservations.
+- **SupplyTrack events in**: SupplyTrack posts `batch.recalled`, `stock.low`,
+  `stock.out` and `stock.restored` to `POST /integrations/supplytrack/events`
+  (role `SYSTEM`). A recalled batch is never allocated again, even if SupplyTrack
+  still lists it, and the recall screen lists every patient who received it
+  (traced through dispense lines) until a pharmacist marks it handled.
 - **Auth**: `RolesGuard` with roles PRESCRIBER, PHARMACIST, PHARMACY_TECHNICIAN,
-  STORE_KEEPER, ADMINISTRATOR and SYSTEM (service accounts). Local development
-  uses `x-user-id` / `x-user-roles` headers; SynergyOne SSO token validation
-  plugs into `resolveActor` and the API refuses to start in production without it.
+  STORE_KEEPER, ADMINISTRATOR and SYSTEM (service accounts). With
+  `AUTH_MODE=oidc` the API verifies SynergyOne SSO bearer tokens (signature from
+  the issuer's JWKS, issuer, audience, expiry). Roles come from the
+  `SSO_ROLES_CLAIM` claim (a dotted path such as `realm_access.roles` works),
+  optionally renamed with `SSO_ROLE_MAP`; the facility comes from
+  `SSO_FACILITY_CLAIM`, or the `x-facility-id` header when the token has none.
+  The web app signs in with authorization code + PKCE. Local development can
+  still use `AUTH_MODE=dev-headers` (`x-user-id` / `x-user-roles`), which the API
+  refuses in production.
 - **Audit**: every change writes `AuditLog` (actor, role, before/after).
 
 Contracts: [CliniTrack](api/clinitrack-contract.md), [SupplyTrack](api/supplytrack-contract.md),
@@ -161,8 +184,8 @@ full REST surface in [openapi.json](api/openapi.json).
 | Phase | Scope | Status |
 |---|---|---|
 | 1. Foundations | Data model, code sets, formulary, safety engine, prescriptions intake, dispensing with SupplyTrack and billing events, refills and SMS, ADRs, outbox, audit, e2e tests | Done |
-| 2. Integration hardening | Confirm contracts with CliniTrack and SupplyTrack, SSO, contract tests, dead-letter dashboard, SupplyTrack reservation expiry | Next |
-| 3. Pharmacy web app | Verification screen with alerts and overrides, dispense screen with labels, returns, refill queue, patient safety records, formulary admin | Done (label printer formats and SSO sign-in still to come) |
+| 2. Integration hardening | SSO, event schemas with contract tests, idempotent writes, integrations screen with retry, SupplyTrack recalls and stock alerts | Done (contracts still to be confirmed with the CliniTrack and SupplyTrack teams; reservation expiry is on SupplyTrack's side) |
+| 3. Pharmacy web app | Verification screen with alerts and overrides, dispense screen with labels, returns, refill queue, patient safety records, formulary admin | Done (label printer formats still to come) |
 | 4. Clinical content | Load full WHO ATC and PPB HPT lists, interaction and dose-limit knowledge base, facility formularies | Needs data sources |
 | 5. Reporting | SHA/DHA extracts through CliniTrack, stock-out reporting with SupplyTrack, prescriber patterns, PPB ADR submission | Later |
 | 6. Standards | FHIR R4 facades (Medication, MedicationRequest, MedicationDispense, AllergyIntolerance, AdverseEvent), Kenya Data Protection Act review (retention, access logs, consent) | Later |

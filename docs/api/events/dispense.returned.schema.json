@@ -1,0 +1,65 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://synergyone/pharmtrack/events/dispense.returned.schema.json",
+  "type": "object",
+  "properties": {
+    "returnId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "dispenseLineId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "dispenseOrderId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "billingRef": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "hptCode": {
+      "type": "string",
+      "minLength": 3,
+      "description": "PPB HPT code"
+    },
+    "atcCode": {
+      "type": "string",
+      "pattern": "^[A-Z]\\d{2}[A-Z]{2}\\d{2}$",
+      "description": "WHO ATC level-5 code"
+    },
+    "quantity": {
+      "type": "number",
+      "exclusiveMinimum": 0
+    },
+    "unitPrice": {
+      "type": "number"
+    },
+    "currency": {
+      "type": "string",
+      "minLength": 1
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "returnId",
+    "dispenseLineId",
+    "dispenseOrderId",
+    "billingRef",
+    "hptCode",
+    "atcCode",
+    "quantity",
+    "unitPrice",
+    "currency",
+    "reason"
+  ],
+  "additionalProperties": false,
+  "description": "Medicine returned by the patient; CliniTrack reverses the billed quantity.",
+  "title": "dispense.returned"
+}

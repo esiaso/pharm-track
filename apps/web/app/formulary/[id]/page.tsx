@@ -6,7 +6,7 @@ import { useState } from 'react';
 import { Badge, Dl, Empty, ErrorBox, Field } from '../../../components/ui';
 import { api, useApi } from '../../../lib/api';
 import { date, dateTime, label, n } from '../../../lib/format';
-import { useSession } from '../../../lib/session';
+import { hasRole, useSession } from '../../../lib/session';
 import type { Drug } from '../../../lib/types';
 
 type DrugDetail = Drug & { atcHierarchy: string[]; atc: { name: string } };
@@ -26,7 +26,7 @@ export default function DrugPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const d = detail.data;
-  const canEdit = session.role === 'PHARMACIST' || session.role === 'ADMINISTRATOR';
+  const canEdit = hasRole(session, 'PHARMACIST');
 
   async function save(path: string, body: unknown, method: string, msg: string) {
     setError(null);

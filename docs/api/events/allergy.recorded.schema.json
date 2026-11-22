@@ -1,0 +1,80 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://synergyone/pharmtrack/events/allergy.recorded.schema.json",
+  "type": "object",
+  "properties": {
+    "allergyId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "patientId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "agentType": {
+      "enum": [
+        "DRUG",
+        "DRUG_CLASS",
+        "NON_DRUG"
+      ]
+    },
+    "agentText": {
+      "type": "string",
+      "minLength": 1
+    },
+    "hptCode": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "atcCode": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "reaction": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "severity": {
+      "enum": [
+        "MILD",
+        "MODERATE",
+        "SEVERE",
+        "LIFE_THREATENING"
+      ]
+    },
+    "verificationStatus": {
+      "enum": [
+        "UNCONFIRMED",
+        "CONFIRMED",
+        "REFUTED"
+      ]
+    },
+    "status": {
+      "enum": [
+        "ACTIVE",
+        "INACTIVE",
+        "ENTERED_IN_ERROR"
+      ]
+    }
+  },
+  "required": [
+    "allergyId",
+    "patientId",
+    "agentType",
+    "agentText",
+    "hptCode",
+    "atcCode",
+    "reaction",
+    "severity",
+    "verificationStatus",
+    "status"
+  ],
+  "additionalProperties": false,
+  "title": "allergy.recorded"
+}

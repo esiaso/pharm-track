@@ -19,8 +19,7 @@ export async function api<T>(path: string, init: { method?: string; body?: unkno
     method: init.method ?? (init.body === undefined ? 'GET' : 'POST'),
     headers: {
       'content-type': 'application/json',
-      'x-user-id': s.userId,
-      'x-user-roles': s.role,
+      ...(s.sso ? { authorization: `Bearer ${s.accessToken ?? ''}` } : { 'x-user-id': s.userId, 'x-user-roles': s.role }),
       'x-facility-id': s.facilityId,
       ...(init.idempotencyKey ? { 'idempotency-key': init.idempotencyKey } : {}),
     },

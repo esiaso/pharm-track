@@ -21,7 +21,7 @@ npm install                                   # installs both workspaces, genera
 cp apps/api/.env.example apps/api/.env        # set DATABASE_URL
 npm run prisma:migrate -w apps/api            # create the schema
 npm run seed -w apps/api                      # sample ATC codes, placeholder HPT codes, sample drugs and rules
-npm run stubs -w apps/api                     # local SupplyTrack (:5000) and CliniTrack (:4000) stand-ins
+npm run stubs -w apps/api                     # local SupplyTrack (:5000), CliniTrack (:4000) and SSO (:4400) stand-ins
 npm run dev:api                               # http://localhost:3000, Swagger at /docs
 npm run dev:web                               # http://localhost:3001
 ```
@@ -35,11 +35,31 @@ The pharmacy web app (`apps/web`) has:
 - **Patients**: allergies (record, confirm), medication history, adverse drug reactions with PPB report download.
 - **Formulary**: search by name, ATC or HPT code, edit with a reason (versioned), facility status, prices, version history.
 
-The user, role, facility and store are picked from the chip at the top right until SynergyOne SSO is connected.
+- **Integrations** (pharmacists): messages waiting, failed or dead for CliniTrack and SupplyTrack (administrators can retry), batch recalls with the patients who received each batch, and stock alerts.
 
-Local requests authenticate with headers until SynergyOne SSO is wired in:
-`x-user-id: u1`, `x-user-roles: PHARMACIST` (or PRESCRIBER, PHARMACY_TECHNICIAN,
-STORE_KEEPER, ADMINISTRATOR, SYSTEM).
+### Signing in
+
+Without SSO settings the web app runs in dev mode: the user, role, facility and
+store are picked from the chip at the top right and sent as `x-user-id` /
+`x-user-roles` headers (API `AUTH_MODE=dev-headers`).
+
+To sign in through SynergyOne SSO (or the local stand-in on :4400):
+
+```bash
+# API (apps/api/.env)
+AUTH_MODE=oidc
+SSO_ISSUER=http://localhost:4400
+SSO_AUDIENCE=pharmtrack
+
+# Web (apps/web/.env.local, read at build time)
+NEXT_PUBLIC_SSO_AUTHORITY=http://localhost:4400
+NEXT_PUBLIC_SSO_CLIENT_ID=pharmtrack-web
+```
+
+The local stand-in shows a form to pick a user, role and facility. For a
+service account token (role `SYSTEM`):
+`curl -d grant_type=client_credentials -d client_id=supplytrack localhost:4400/token`.
+See `apps/api/.env.example` and `apps/web/.env.example` for the claim and role mapping settings.
 
 ## Tests
 

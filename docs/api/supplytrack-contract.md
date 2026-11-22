@@ -51,7 +51,21 @@ POST /stock/returns
   "reason": "Course stopped by doctor", "reference": "dispense-line:<uuid>" }
 ```
 
-### Events PharmTrack may consume later (phase 2)
+### Events SupplyTrack sends to PharmTrack
 
-`stock.low`, `stock.out`, `batch.recalled` (HPT + batch) so the dispensing screen
-can warn and recalled batches can be traced to patients through dispense lines.
+`POST {PHARMTRACK}/api/v1/integrations/supplytrack/events`, service account
+with role `SYSTEM`, header `Idempotency-Key` (a repeat replays the first result).
+
+```json
+{ "type": "batch.recalled", "payload": { "hptCode": "…", "batchNumber": "…", "reason": "…", "recallClass": "CLASS_II", "reference": "…" } }
+{ "type": "stock.out", "payload": { "storeId": "STORE-1", "hptCode": "…", "quantity": 0 } }
+```
+
+| Event | Effect in PharmTrack |
+|---|---|
+| `batch.recalled` | The batch is never allocated again. Response lists `affectedPatients` (patient, prescription, quantity, date) traced from dispense lines. Shown on the Integrations screen until a pharmacist marks it handled. |
+| `stock.low` / `stock.out` / `stock.restored` | Updates the stock alert for that store and item, shown on the Integrations screen. |
+
+Malformed payloads get `400`. JSON Schemas for what PharmTrack sends
+(`supplytrack.stock.commit`, `supplytrack.stock.return`) and accepts
+(`supplytrack.inbound`) are in [`events/`](events).

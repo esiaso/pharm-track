@@ -1,0 +1,112 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://synergyone/pharmtrack/events/supplytrack.inbound.schema.json",
+  "title": "SupplyTrack \u2192 PharmTrack event",
+  "description": "Body of POST {PHARMTRACK}/api/v1/integrations/supplytrack/events.",
+  "type": "object",
+  "required": [
+    "type",
+    "payload"
+  ],
+  "properties": {
+    "type": {
+      "enum": [
+        "batch.recalled",
+        "stock.low",
+        "stock.out",
+        "stock.restored"
+      ]
+    },
+    "occurredAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "payload": {
+      "type": "object"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "batch.recalled"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "hptCode": {
+                "type": "string",
+                "minLength": 3,
+                "description": "PPB HPT code"
+              },
+              "batchNumber": {
+                "type": "string",
+                "minLength": 1
+              },
+              "reason": {
+                "type": "string",
+                "minLength": 1
+              },
+              "recallClass": {
+                "type": "string"
+              },
+              "reference": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "hptCode",
+              "batchNumber",
+              "reason"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "enum": [
+              "stock.low",
+              "stock.out",
+              "stock.restored"
+            ]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "storeId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "hptCode": {
+                "type": "string",
+                "minLength": 3,
+                "description": "PPB HPT code"
+              },
+              "quantity": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "storeId",
+              "hptCode"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    }
+  ]
+}
