@@ -53,6 +53,12 @@ export class FormularyController {
     return this.service.updateDrug(id, dto, actor);
   }
 
+  @Get('drugs/:id/prices')
+  @Roles(Role.PHARMACIST, Role.SYSTEM)
+  prices(@Param('id') id: string) {
+    return this.service.prices(id);
+  }
+
   @Post('drugs/:id/prices')
   @Roles(Role.PHARMACIST)
   setPrice(@Param('id') id: string, @Body() dto: SetPriceDto, @CurrentActor() actor: Actor) {

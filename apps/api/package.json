@@ -14,7 +14,8 @@
     "postinstall": "prisma generate",
     "seed": "ts-node src/seed/sample-data.ts",
     "test:e2e": "jest --runInBand test",
-    "openapi": "nest build && node dist/scripts/export-openapi.js"
+    "openapi": "nest build && node dist/scripts/export-openapi.js",
+    "stubs": "ts-node src/scripts/dev-stubs.ts"
   },
   "dependencies": {
     "@nestjs/common": "11.2.11",

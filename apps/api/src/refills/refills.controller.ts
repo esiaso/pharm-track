@@ -55,6 +55,12 @@ export class RefillsController {
     return this.notifications.list({ patientId, status });
   }
 
+  @Get('patients/:patientId/contact-preferences')
+  @Roles(...PHARMACY, Role.SYSTEM)
+  getContact(@Param('patientId') patientId: string) {
+    return this.notifications.getContactPreference(patientId);
+  }
+
   /** CliniTrack keeps patient SMS contact and consent in sync here. */
   @Put('patients/:patientId/contact-preferences')
   @Roles(Role.SYSTEM, Role.PHARMACIST)

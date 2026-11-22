@@ -158,6 +158,10 @@ export class FormularyService {
     });
   }
 
+  prices(drugId: string) {
+    return this.prisma.drugPrice.findMany({ where: { drugId }, orderBy: [{ priceListCode: 'asc' }, { effectiveFrom: 'desc' }] });
+  }
+
   /** Current unit price on a price list, falling back to DEFAULT. */
   async currentPrice(tx: Tx | PrismaService, drugId: string, priceListCode = 'DEFAULT', at = new Date()) {
     for (const list of priceListCode === 'DEFAULT' ? ['DEFAULT'] : [priceListCode, 'DEFAULT']) {

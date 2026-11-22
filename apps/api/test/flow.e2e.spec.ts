@@ -135,6 +135,8 @@ run('PharmTrack end-to-end', () => {
     await api().patch(`/api/v1/formulary/drugs/${drug.body.id}`).set(PHARMACIST).send({ formularyStatus: 'RESTRICTED', reason: 'DTC decision' }).expect(200);
     const versions = await api().get(`/api/v1/formulary/drugs/${drug.body.id}/versions`).set(PHARMACIST).expect(200);
     expect(versions.body[0]).toMatchObject({ version: 2, reason: 'DTC decision' });
+    const prices = await api().get(`/api/v1/formulary/drugs/${drug.body.id}/prices`).set(PHARMACIST).expect(200);
+    expect(prices.body[0]).toMatchObject({ priceListCode: 'DEFAULT', unitPrice: '10' });
   });
 
   it('returns graded alerts from the real-time safety check', async () => {
@@ -228,6 +230,9 @@ run('PharmTrack end-to-end', () => {
 
     await api().put('/api/v1/patients/PAT-1/contact-preferences').set(SYSTEM).send({ firstName: 'Amina', phone: '0712 345 678', smsOptIn: true, language: 'sw' }).expect(200);
     await api().put('/api/v1/facilities/FAC-1/profile').set(H('ADMINISTRATOR', 'admin')).send({ name: 'Synergy Clinic', phone: '0700 000 000' }).expect(200);
+
+    const pref = await api().get('/api/v1/patients/PAT-1/contact-preferences').set(PHARMACIST).expect(200);
+    expect(pref.body).toMatchObject({ smsOptIn: true, phoneE164: '+254712345678' });
 
     const refills = app.get(RefillsService);
     const reminderDay = addDays(new Date(s.body.nextDueDate), -3);
