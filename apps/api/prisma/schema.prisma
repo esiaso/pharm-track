@@ -714,6 +714,8 @@ model PatientContactPreference {
   /// Only the first name is kept, for the SMS greeting (data minimisation).
   firstName         String?
   phoneE164         String?
+  /// When contact details were removed (consent withdrawn and retention passed, or an erasure request).
+  erasedAt          DateTime?
   smsOptIn          Boolean      @default(false)
   language          String       @default("en") // "en" | "sw"
   consentRecordedAt DateTime?
@@ -931,4 +933,38 @@ enum ReportStatus {
   SUBMITTED
   /// A submitted run that a later amendment replaced.
   SUPERSEDED
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Data protection (phase 6)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// One row per patient per request that returned that patient's data (Kenya
+/// Data Protection Act: who saw what, and when). Written in the request, so a
+/// read whose access cannot be recorded fails instead of going unrecorded.
+model PatientAccessLog {
+  id         String   @id @default(uuid())
+  patientId  String
+  actorId    String
+  actorRole  String
+  facilityId String?
+  /// What was read, e.g. "allergies.list", "fhir.MedicationRequest.search".
+  action     String
+  /// Purpose of use sent by the caller (x-purpose-of-use), e.g. TREATMENT.
+  purpose    String?
+  path       String
+  at         DateTime @default(now())
+
+  @@index([patientId, at])
+  @@index([actorId, at])
+  @@index([at])
+}
+
+/// Each run of the retention job, with what it removed.
+model RetentionRun {
+  id        String   @id @default(uuid())
+  startedAt DateTime @default(now())
+  trigger   String // CRON | MANUAL
+  actorId   String?
+  results   Json
 }

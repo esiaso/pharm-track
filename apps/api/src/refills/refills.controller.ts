@@ -2,6 +2,7 @@ import { Body, Controller, Get, HttpCode, Param, Post, Put, Query } from '@nestj
 import { ApiTags } from '@nestjs/swagger';
 import { RefillStatus } from '@prisma/client';
 import { Actor, CurrentActor, Role, Roles } from '../common/auth';
+import { PatientData } from '../common/patient-access';
 import { NotificationsService } from './notifications.service';
 import { ContactPreferenceDto, DeliveryReportDto, FacilityProfileDto, RequestRefillDto, SmsTemplateDto } from './refills.dto';
 import { RefillsService } from './refills.service';
@@ -23,12 +24,14 @@ export class RefillsController {
   }
 
   @Get('refills/:id')
+  @PatientData('refill.read')
   @Roles(...PHARMACY, Role.SYSTEM, Role.PRESCRIBER)
   get(@Param('id') id: string) {
     return this.refills.get(id);
   }
 
   @Get('refills/:id/adherence')
+  @PatientData('refill.adherence')
   @Roles(...PHARMACY, Role.PRESCRIBER)
   adherence(@Param('id') id: string) {
     return this.refills.adherence(id);
@@ -50,12 +53,14 @@ export class RefillsController {
   }
 
   @Get('notifications')
+  @PatientData('notifications.list')
   @Roles(...PHARMACY)
   notificationsList(@Query('patientId') patientId?: string, @Query('status') status?: string) {
     return this.notifications.list({ patientId, status });
   }
 
   @Get('patients/:patientId/contact-preferences')
+  @PatientData('contact-preferences.read')
   @Roles(...PHARMACY, Role.SYSTEM)
   getContact(@Param('patientId') patientId: string) {
     return this.notifications.getContactPreference(patientId);

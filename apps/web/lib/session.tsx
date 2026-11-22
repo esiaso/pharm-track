@@ -35,7 +35,8 @@ export let currentSession: Session = DEFAULT;
 
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [session, setState] = useState<Session>(DEFAULT);
-  const [status, setStatus] = useState<Ctx['status']>(ssoEnabled() ? 'loading' : 'ready');
+  // 'loading' until the saved session is restored, so no request goes out as the default user.
+  const [status, setStatus] = useState<Ctx['status']>('loading');
 
   const update = (patch: Partial<Session>) => {
     setState((prev) => {
@@ -63,6 +64,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       next.roles = [next.role];
       currentSession = next;
       setState(next);
+      setStatus('ready');
       return;
     }
     const um = userManager();

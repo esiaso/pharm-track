@@ -2,6 +2,7 @@ import { Body, Controller, Delete, Get, Param, Post, Query, Res } from '@nestjs/
 import { ApiTags } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { Actor, CurrentActor, Role, Roles } from '../common/auth';
+import { PatientData } from '../common/patient-access';
 import { AdrBatchDto, GenerateReportDto, ListRunsQuery, PeriodQuery, StockOutQuery, SubmitReportDto } from './reports.dto';
 import { consumptionCsv, prescribingCsv, ReportsService, stockOutCsv } from './reports.service';
 
@@ -58,12 +59,14 @@ export class ReportsController {
 
   // ADR reporting to PPB
   @Get('adrs/ppb-queue')
+  @PatientData('adrs.ppb-queue')
   @Roles(Role.PHARMACIST)
   adrQueue() {
     return this.service.adrQueue();
   }
 
   @Post('adrs/ppb-batch')
+  @PatientData('adrs.ppb-batch')
   @Roles(Role.PHARMACIST)
   adrBatch(@Body() dto: AdrBatchDto, @CurrentActor() actor: Actor) {
     return this.service.adrBatch(dto.adrIds, actor);

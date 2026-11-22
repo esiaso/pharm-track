@@ -137,3 +137,16 @@ consumption by ATC/HPT code with DDDs, antimicrobial use, refills and ADR counts
 A corrected return is a new version with `amendsReportId` set to the version it
 replaces; CliniTrack should forward the latest version to SHA/DHA and may reply
 with a `reference`, which PharmTrack stores and shows.
+
+## D. FHIR and data protection
+
+CliniTrack can read PharmTrack's medication records as FHIR R4 at
+`/api/v1/fhir/R4` (see [FHIR.md](../FHIR.md)). Every read of patient data, through
+FHIR or the REST API, is recorded in PharmTrack's access log; send
+`x-purpose-of-use` (e.g. `TREATMENT`) so the log says why.
+
+When a patient withdraws SMS consent, CliniTrack sends the updated contact
+preferences as before; PharmTrack now also cancels SMS already waiting to go
+out. When a patient asks for their contact details to be erased, erase them in
+CliniTrack first: PharmTrack's copy is a mirror and is overwritten by the next
+update from CliniTrack.

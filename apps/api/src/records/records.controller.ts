@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { Actor, CurrentActor, Role, Roles } from '../common/auth';
+import { PatientData } from '../common/patient-access';
 import { AssessAdrDto, CreateAdrDto, CreateAllergyDto, MarkAdrSubmittedDto, MarkAdrAcknowledgedDto, UpdateAllergyDto } from './records.dto';
 import { RecordsService } from './records.service';
 
@@ -12,6 +13,7 @@ export class RecordsController {
   constructor(private readonly service: RecordsService) {}
 
   @Get('patients/:patientId/allergies')
+  @PatientData('allergies.read')
   @Roles(...CLINICAL, Role.PHARMACY_TECHNICIAN)
   allergies(@Param('patientId') patientId: string, @Query('includeInactive') includeInactive?: string) {
     return this.service.listAllergies(patientId, includeInactive === 'true');
@@ -30,6 +32,7 @@ export class RecordsController {
   }
 
   @Get('adrs')
+  @PatientData('adrs.list')
   @Roles(Role.PHARMACIST)
   adrs(@Query('patientId') patientId?: string, @Query('ppbReportStatus') ppbReportStatus?: string) {
     return this.service.listAdrs({ patientId, ppbReportStatus });
@@ -48,6 +51,7 @@ export class RecordsController {
   }
 
   @Get('adrs/:id/ppb-export')
+  @PatientData('adrs.ppb-export')
   @Roles(Role.PHARMACIST)
   exportPpb(@Param('id') id: string, @CurrentActor() actor: Actor) {
     return this.service.exportAdrForPpb(id, actor);

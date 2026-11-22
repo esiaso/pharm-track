@@ -39,9 +39,11 @@ systems. The **WHO ATC code** travels with it for classification and reporting.
 | `prescriptions/` | Receives signed prescriptions from CliniTrack, idempotently. Medication history. |
 | `dispensing/` | Queue, verification, FEFO dispensing via SupplyTrack, billing to CliniTrack, returns, controlled-drug register. |
 | `refills/` | Refill schedules, refill requests, daily reminders, SMS notifications and consent. |
-| `reports/` | Consumption, antimicrobial use, refill status, safety overrides. |
+| `reports/` | Consumption, antimicrobial use, refill status, safety overrides, monthly returns, stock-outs, prescribing indicators, PPB ADR queue. |
+| `fhir/` | Read-only FHIR R4 facade: Medication, MedicationRequest, MedicationDispense, AllergyIntolerance, AdverseEvent. See [FHIR.md](FHIR.md). |
+| `privacy/` | Patient access log, data export and erasure of contact details, retention job. See [DATA-PROTECTION.md](DATA-PROTECTION.md). |
 | `integrations/` | SupplyTrack and CliniTrack clients, SMS gateway adapter, transactional outbox. |
-| `common/` | Roles guard, audit log, errors. |
+| `common/` | Roles guard, audit log, patient access log interceptor, errors. |
 
 ## Workflows
 
@@ -195,4 +197,4 @@ full REST surface in [openapi.json](api/openapi.json).
 | 3. Pharmacy web app | Verification screen with alerts and overrides, dispense screen with labels, returns, refill queue, patient safety records, formulary admin | Done (label printer formats still to come) |
 | 4. Clinical content | Tools to load and govern content: WHO ATC/DDD and PPB HPT releases (dry run, full releases retire codes, drugs needing re-coding), safety rule sets with second-pharmacist approval, facility formulary and drug master files, command-line import. See [CLINICAL-CONTENT.md](CLINICAL-CONTENT.md) | Done (the content itself, i.e. the official code lists and the interaction and dose rules, still has to be sourced and loaded) |
 | 5. Reporting | Monthly pharmacy return (consumption with DDDs, antimicrobial use, refills, ADRs) submitted to CliniTrack for SHA/DHA with versions and amendments, stock-out episodes and monthly report to SupplyTrack, WHO prescribing indicators per prescriber, PPB ADR queue with deadlines and batch export, CSV downloads | Done (SHA/DHA and PPB formats still to be confirmed; ADR submission to PPB is a manual upload) |
-| 6. Standards | FHIR R4 facades (Medication, MedicationRequest, MedicationDispense, AllergyIntolerance, AdverseEvent), Kenya Data Protection Act review (retention, access logs, consent) | Later |
+| 6. Standards | Read-only FHIR R4 facade (Medication, MedicationRequest, MedicationDispense, AllergyIntolerance, AdverseEvent) with a CapabilityStatement, see [FHIR.md](FHIR.md). Kenya Data Protection Act review with a patient access log, patient data export, erasure of SMS contact details, retention job and stricter SMS consent, see [DATA-PROTECTION.md](DATA-PROTECTION.md) | Done (the national FHIR profile and code system URIs, legal retention periods for clinical records, and the open items in the review still need confirming) |

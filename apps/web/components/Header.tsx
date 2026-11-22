@@ -13,6 +13,7 @@ const NAV = [
   { href: '/reports', label: 'Reports', roles: ['PHARMACIST'] },
   { href: '/content', label: 'Clinical content', roles: ['PHARMACIST'] },
   { href: '/integrations', label: 'Integrations', roles: ['PHARMACIST'] },
+  { href: '/privacy', label: 'Data protection', roles: ['ADMINISTRATOR'] },
 ];
 
 export function Header() {

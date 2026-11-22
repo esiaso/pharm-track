@@ -15,6 +15,9 @@ import { RefillsModule } from './refills/refills.module';
 import { ReportsModule } from './reports/reports.module';
 import { SafetyModule } from './safety/safety.module';
 import { ContentModule } from './content/content.module';
+import { PatientAccessInterceptor } from './common/patient-access';
+import { FhirModule } from './fhir/fhir.module';
+import { PrivacyModule } from './privacy/privacy.module';
 
 @Controller()
 class HealthController {
@@ -39,11 +42,14 @@ class HealthController {
     RefillsModule,
     DispensingModule,
     ReportsModule,
+    FhirModule,
+    PrivacyModule,
   ],
   controllers: [HealthController],
   providers: [
     { provide: APP_GUARD, useClass: RolesGuard },
     { provide: APP_INTERCEPTOR, useClass: IdempotencyInterceptor },
+    { provide: APP_INTERCEPTOR, useClass: PatientAccessInterceptor },
   ],
 })
 export class AppModule {}

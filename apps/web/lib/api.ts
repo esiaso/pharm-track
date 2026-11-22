@@ -1,7 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
-import { currentSession } from './session';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { currentSession, useSession } from './session';
 
 export class ApiError extends Error {
   constructor(
@@ -53,23 +53,33 @@ export async function api<T>(path: string, init: { method?: string; body?: unkno
   return body as T;
 }
 
-/** Loads a GET endpoint, with reload. `path` null skips loading. */
+/**
+ * Loads a GET endpoint, with reload. `path` null skips loading. Loads again
+ * when the user, role or facility changes (including when the saved session
+ * is restored after the first render).
+ */
 export function useApi<T>(path: string | null) {
+  const { session } = useSession();
+  const who = `${session.userId}|${session.role}|${session.facilityId}|${session.accessToken ? 1 : 0}`;
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const seq = useRef(0);
   const load = useCallback(async () => {
     if (!path) return;
+    const mine = ++seq.current; // an older response must not overwrite a newer one
     setLoading(true);
     setError(null);
     try {
-      setData(await api<T>(path));
+      const d = await api<T>(path);
+      if (mine === seq.current) setData(d);
     } catch (e) {
-      setError((e as Error).message);
+      if (mine === seq.current) setError((e as Error).message);
     } finally {
-      setLoading(false);
+      if (mine === seq.current) setLoading(false);
     }
-  }, [path]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [path, who]);
   useEffect(() => {
     void load();
   }, [load]);

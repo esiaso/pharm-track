@@ -2,6 +2,7 @@ import { Body, Controller, Get, Param, Post, Res } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { Actor, CurrentActor, Role, Roles } from '../common/auth';
+import { PatientData } from '../common/patient-access';
 import { CancelDto, SignedPrescriptionDto } from './prescriptions.dto';
 import { PrescriptionsService } from './prescriptions.service';
 
@@ -20,6 +21,7 @@ export class PrescriptionsController {
   }
 
   @Get('prescriptions/:id')
+  @PatientData('prescription.read')
   @Roles(Role.SYSTEM, Role.PRESCRIBER, Role.PHARMACIST, Role.PHARMACY_TECHNICIAN)
   get(@Param('id') id: string) {
     return this.service.get(id);
@@ -32,6 +34,7 @@ export class PrescriptionsController {
   }
 
   @Get('patients/:patientId/medication-history')
+  @PatientData('medication-history.read')
   @Roles(Role.SYSTEM, Role.PRESCRIBER, Role.PHARMACIST, Role.PHARMACY_TECHNICIAN)
   history(@Param('patientId') patientId: string) {
     return this.service.history(patientId);

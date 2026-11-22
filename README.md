@@ -9,6 +9,7 @@ SMS reminders.
 - Brief: [docs/PROMPT.md](docs/PROMPT.md)
 - Architecture, workflows, phased plan: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 - Integration contracts: [CliniTrack](docs/api/clinitrack-contract.md) · [SupplyTrack](docs/api/supplytrack-contract.md) · [OpenAPI](docs/api/openapi.json)
+- FHIR R4 facade: [docs/FHIR.md](docs/FHIR.md) · Data protection review: [docs/DATA-PROTECTION.md](docs/DATA-PROTECTION.md)
 
 ## Stack
 
@@ -37,6 +38,7 @@ The pharmacy web app (`apps/web`) has:
 
 - **Clinical content** (pharmacists; code lists by administrators): load WHO ATC/DDD and PPB HPT releases, safety rule sets (a second pharmacist approves), facility formularies and the drug master from CSV, each checked before it is applied. See [docs/CLINICAL-CONTENT.md](docs/CLINICAL-CONTENT.md), which also covers the `npm run content:import` command line.
 - **Reports** (pharmacists): monthly returns for SHA/DHA (through CliniTrack) and stock-out reports for SupplyTrack, each checked, submitted and amended by version; stock-out days per item; WHO prescribing indicators by prescriber; the ADR queue for PPB with due dates and batch export. Tables download as CSV.
+- **Data protection** (administrators): the patient access log (who read whose data, when and why), a patient's full data export, removing SMS contact details on request, and the retention job. See [docs/DATA-PROTECTION.md](docs/DATA-PROTECTION.md).
 - **Integrations** (pharmacists): messages waiting, failed or dead for CliniTrack and SupplyTrack (administrators can retry), batch recalls with the patients who received each batch, and stock alerts.
 
 ### Signing in
