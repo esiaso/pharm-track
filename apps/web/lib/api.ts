@@ -12,15 +12,36 @@ export class ApiError extends Error {
   }
 }
 
+function authHeaders(): Record<string, string> {
+  const s = currentSession;
+  return {
+    ...(s.sso ? { authorization: `Bearer ${s.accessToken ?? ''}` } : { 'x-user-id': s.userId, 'x-user-roles': s.role }),
+    'x-facility-id': s.facilityId,
+  };
+}
+
+/** Downloads a file endpoint (CSV exports, templates) with the session's credentials. */
+export async function download(path: string, filename: string): Promise<void> {
+  const res = await fetch(`/api/v1${path}`, { headers: authHeaders(), cache: 'no-store' });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new ApiError(res.status, text ? JSON.parse(text) : undefined);
+  }
+  const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 /** Calls the PharmTrack API through the Next.js /api rewrite, as the current session user. */
 export async function api<T>(path: string, init: { method?: string; body?: unknown; idempotencyKey?: string } = {}): Promise<T> {
-  const s = currentSession;
   const res = await fetch(`/api/v1${path}`, {
     method: init.method ?? (init.body === undefined ? 'GET' : 'POST'),
     headers: {
       'content-type': 'application/json',
-      ...(s.sso ? { authorization: `Bearer ${s.accessToken ?? ''}` } : { 'x-user-id': s.userId, 'x-user-roles': s.role }),
-      'x-facility-id': s.facilityId,
+      ...authHeaders(),
       ...(init.idempotencyKey ? { 'idempotency-key': init.idempotencyKey } : {}),
     },
     body: init.body === undefined ? undefined : JSON.stringify(init.body),

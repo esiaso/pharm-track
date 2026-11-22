@@ -15,7 +15,8 @@
     "seed": "ts-node src/seed/sample-data.ts",
     "test:e2e": "jest --runInBand test",
     "openapi": "nest build && node dist/scripts/export-openapi.js",
-    "stubs": "ts-node src/scripts/dev-stubs.ts"
+    "stubs": "ts-node src/scripts/dev-stubs.ts",
+    "content:import": "ts-node src/scripts/import-content.ts"
   },
   "dependencies": {
     "@nestjs/common": "11.2.11",

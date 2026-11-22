@@ -123,6 +123,10 @@ dispenses), drug-disease contraindications by ICD-10/11 prefix, duplicate
 therapy (same ATC level 4), dose limits (age, weight, CrCl, hepatic), pregnancy
 and lactation, early refill. Every alert and override is stored in `SafetyAlert`.
 
+Only rules in an **active** rule set (or entered before rule sets existed) are
+checked. Rule sets are loaded as drafts and activated by a second pharmacist;
+see [CLINICAL-CONTENT.md](CLINICAL-CONTENT.md).
+
 ## Integration patterns
 
 - **Idempotency**: inbound prescriptions are keyed on CliniTrack's `externalId`;
@@ -186,6 +190,6 @@ full REST surface in [openapi.json](api/openapi.json).
 | 1. Foundations | Data model, code sets, formulary, safety engine, prescriptions intake, dispensing with SupplyTrack and billing events, refills and SMS, ADRs, outbox, audit, e2e tests | Done |
 | 2. Integration hardening | SSO, event schemas with contract tests, idempotent writes, integrations screen with retry, SupplyTrack recalls and stock alerts | Done (contracts still to be confirmed with the CliniTrack and SupplyTrack teams; reservation expiry is on SupplyTrack's side) |
 | 3. Pharmacy web app | Verification screen with alerts and overrides, dispense screen with labels, returns, refill queue, patient safety records, formulary admin | Done (label printer formats still to come) |
-| 4. Clinical content | Load full WHO ATC and PPB HPT lists, interaction and dose-limit knowledge base, facility formularies | Needs data sources |
+| 4. Clinical content | Tools to load and govern content: WHO ATC/DDD and PPB HPT releases (dry run, full releases retire codes, drugs needing re-coding), safety rule sets with second-pharmacist approval, facility formulary and drug master files, command-line import. See [CLINICAL-CONTENT.md](CLINICAL-CONTENT.md) | Done (the content itself, i.e. the official code lists and the interaction and dose rules, still has to be sourced and loaded) |
 | 5. Reporting | SHA/DHA extracts through CliniTrack, stock-out reporting with SupplyTrack, prescriber patterns, PPB ADR submission | Later |
 | 6. Standards | FHIR R4 facades (Medication, MedicationRequest, MedicationDispense, AllergyIntolerance, AdverseEvent), Kenya Data Protection Act review (retention, access logs, consent) | Later |

@@ -35,6 +35,7 @@ The pharmacy web app (`apps/web`) has:
 - **Patients**: allergies (record, confirm), medication history, adverse drug reactions with PPB report download.
 - **Formulary**: search by name, ATC or HPT code, edit with a reason (versioned), facility status, prices, version history.
 
+- **Clinical content** (pharmacists; code lists by administrators): load WHO ATC/DDD and PPB HPT releases, safety rule sets (a second pharmacist approves), facility formularies and the drug master from CSV, each checked before it is applied. See [docs/CLINICAL-CONTENT.md](docs/CLINICAL-CONTENT.md), which also covers the `npm run content:import` command line.
 - **Integrations** (pharmacists): messages waiting, failed or dead for CliniTrack and SupplyTrack (administrators can retry), batch recalls with the patients who received each batch, and stock alerts.
 
 ### Signing in

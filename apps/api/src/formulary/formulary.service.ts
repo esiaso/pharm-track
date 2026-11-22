@@ -251,10 +251,12 @@ export class FormularyService {
   private async assertCodes(db: Tx | PrismaService, atcCode: string, hptCode: string) {
     if (!isValidAtc(atcCode, 5)) throw new BadRequestException(`ATC code ${atcCode} must be a valid level-5 WHO ATC code.`);
     if (!isValidHptFormat(hptCode)) throw new BadRequestException(`HPT code ${hptCode} is not in the expected PPB format.`);
-    if (!(await db.atcCode.findUnique({ where: { code: atcCode } })))
-      throw new BadRequestException(`ATC code ${atcCode} is not in the imported WHO ATC code set.`);
-    if (!(await db.hptCode.findUnique({ where: { code: hptCode } })))
-      throw new BadRequestException(`HPT code ${hptCode} is not in the imported PPB HPT code set.`);
+    const atc = await db.atcCode.findUnique({ where: { code: atcCode } });
+    if (!atc) throw new BadRequestException(`ATC code ${atcCode} is not in the imported WHO ATC code set.`);
+    if (atc.retiredInRelease) throw new BadRequestException(`ATC code ${atcCode} was retired in ${atc.retiredInRelease}.`);
+    const hpt = await db.hptCode.findUnique({ where: { code: hptCode } });
+    if (!hpt) throw new BadRequestException(`HPT code ${hptCode} is not in the imported PPB HPT code set.`);
+    if (hpt.retiredInRelease) throw new BadRequestException(`HPT code ${hptCode} was retired in ${hpt.retiredInRelease}.`);
   }
 
   /** Keeps CliniTrack's prescription-pad catalogue in step with the master. */

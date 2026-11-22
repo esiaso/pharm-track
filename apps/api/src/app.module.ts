@@ -14,6 +14,7 @@ import { RecordsModule } from './records/records.module';
 import { RefillsModule } from './refills/refills.module';
 import { ReportsModule } from './reports/reports.module';
 import { SafetyModule } from './safety/safety.module';
+import { ContentModule } from './content/content.module';
 
 @Controller()
 class HealthController {
@@ -30,6 +31,7 @@ class HealthController {
     PrismaModule,
     AuditModule,
     IntegrationsModule,
+    ContentModule,
     SafetyModule,
     FormularyModule,
     RecordsModule,
