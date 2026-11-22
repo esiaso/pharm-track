@@ -37,6 +37,14 @@ You are building **PharmTrack**, the pharmacy management system in the SynergyOn
 - PharmTrack sends dispensed lines (drug, ATC/HPT, quantity, batch, unit price) to CliniTrack.
 - CliniTrack handles pricing rules, cash/insurance/SHA schemes, invoicing and payment. PharmTrack only stores the billing reference and status.
 
+## 5a. Refill management
+- A prescription item may authorise refills. PharmTrack tracks each item's refill schedule: refills authorised, refills used and remaining, next due date (from the last dispense date, quantity and daily dose), and a refill window (earliest allowed date and grace period).
+- Refill status per item: upcoming, due, overdue, completed, cancelled, expired. A refill queue lets pharmacy staff see who is due or overdue by facility.
+- Refills are dispensed through the normal dispensing workflow (pharmacist verification, safety re-check, FEFO stock from SupplyTrack). Early refills before the allowed date need a pharmacist override with a reason.
+- **SMS notifications to patients**: reminders before a refill is due, on the due date and when overdue, plus "ready for collection" messages. Templates are configurable per facility and language (English and Kiswahili). Sending goes through a pluggable SMS gateway, with delivery status tracked, retries on failure, and opt-in/opt-out per patient recorded in line with the Kenya Data Protection Act. Patient phone numbers and consent come from CliniTrack.
+- **Billing for refills**: each refill dispense is sent to CliniTrack as a billable item, the same way as a first dispense, flagged as a refill with its sequence number so CliniTrack can apply scheme rules (for example SHA chronic-care refills). PharmTrack stores the billing reference and status.
+- Adherence reporting uses refill timeliness (days late, missed refills, proportion of days covered).
+
 ## 6. Patient medication safety records
 - Allergies (agent, reaction, severity, verified status) shared with CliniTrack.
 - Contraindication rules linked to ATC classes and to diagnosis codes (ICD-10/ICD-11).
@@ -48,6 +56,7 @@ You are building **PharmTrack**, the pharmacy management system in the SynergyOn
 - Reports for consumption, stock-outs (with SupplyTrack), ADRs, controlled drugs, formulary compliance, prescriber patterns and antimicrobial use by ATC class.
 
 ## 8. Technical requirements
+- Stack: **NestJS** (API and integration services), **Next.js** (PharmTrack web app for formulary, dispensing and refill queues), **PostgreSQL**.
 - Versioned REST APIs and events (for example `prescription.signed`, `dispense.completed`, `stock.reserved`) between the three systems. Use idempotent messaging and retries.
 - FHIR R4 resources where suitable: Medication, MedicationRequest, MedicationDispense, AllergyIntolerance, AdverseEvent.
 - Role-based access for prescriber, pharmacist, pharmacy technician, store keeper and administrator. Use SynergyOne SSO.
