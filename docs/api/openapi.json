@@ -2679,6 +2679,239 @@
           "reports"
         ]
       }
+    },
+    "/api/v1/fhir/R4/metadata": {
+      "get": {
+        "operationId": "FhirController_metadata",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "fhir"
+        ]
+      }
+    },
+    "/api/v1/fhir/R4/{type}": {
+      "get": {
+        "operationId": "FhirController_search",
+        "parameters": [
+          {
+            "name": "type",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "fhir"
+        ]
+      }
+    },
+    "/api/v1/fhir/R4/{type}/{id}": {
+      "get": {
+        "operationId": "FhirController_read",
+        "parameters": [
+          {
+            "name": "type",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "fhir"
+        ]
+      }
+    },
+    "/api/v1/privacy/access-log": {
+      "get": {
+        "operationId": "PrivacyController_accessLog",
+        "parameters": [
+          {
+            "name": "patientId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "actorId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 1000,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Who read which patient's data, and when.",
+        "tags": [
+          "privacy"
+        ]
+      }
+    },
+    "/api/v1/privacy/patients/{patientId}/export": {
+      "get": {
+        "operationId": "PrivacyController_exportPatient",
+        "parameters": [
+          {
+            "name": "patientId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Everything PharmTrack holds about one patient (data subject access request).",
+        "tags": [
+          "privacy"
+        ]
+      }
+    },
+    "/api/v1/privacy/patients/{patientId}/erase-contact": {
+      "post": {
+        "operationId": "PrivacyController_eraseContact",
+        "parameters": [
+          {
+            "name": "patientId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EraseContactDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Removes the patient's phone number and first name and stops SMS. Clinical records are kept.",
+        "tags": [
+          "privacy"
+        ]
+      }
+    },
+    "/api/v1/privacy/retention": {
+      "get": {
+        "operationId": "PrivacyController_retention",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "privacy"
+        ]
+      }
+    },
+    "/api/v1/privacy/retention/run": {
+      "post": {
+        "operationId": "PrivacyController_runRetention",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "privacy"
+        ]
+      }
     }
   },
   "info": {
@@ -3925,6 +4158,19 @@
             "description": "Needed when the report has data-quality warnings."
           }
         }
+      },
+      "EraseContactDto": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "minLength": 5,
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "reason"
+        ]
       }
     }
   }

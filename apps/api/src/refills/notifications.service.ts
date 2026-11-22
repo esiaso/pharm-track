@@ -79,12 +79,22 @@ export class NotificationsService {
         orderBy: { scheduledFor: 'asc' },
         take: 100,
       });
+      // Consent is checked again at send time: the patient may have opted out
+      // (or changed number) since the message was queued.
+      const prefs = new Map(
+        (await this.prisma.patientContactPreference.findMany({ where: { patientId: { in: [...new Set(due.map((n) => n.patientId))] } } })).map((p) => [p.patientId, p]),
+      );
       for (const n of due) {
+        const pref = prefs.get(n.patientId);
+        if (!pref?.smsOptIn || !pref.phoneE164) {
+          await this.prisma.notification.update({ where: { id: n.id }, data: { status: 'SKIPPED_NO_CONSENT', toAddress: null } });
+          continue;
+        }
         try {
-          const res = await this.sms.send(n.toAddress!, n.body, n.id);
+          const res = await this.sms.send(pref.phoneE164, n.body, n.id);
           await this.prisma.notification.update({
             where: { id: n.id },
-            data: { status: 'SENT', sentAt: new Date(), providerMessageId: res.providerMessageId, attempts: { increment: 1 }, lastError: null },
+            data: { status: 'SENT', toAddress: pref.phoneE164, sentAt: new Date(), providerMessageId: res.providerMessageId, attempts: { increment: 1 }, lastError: null },
           });
         } catch (e) {
           const attempts = n.attempts + 1;
@@ -127,11 +137,20 @@ export class NotificationsService {
       phoneE164,
       smsOptIn: dto.smsOptIn && !!phoneE164,
       language: dto.language ?? 'en',
-      consentRecordedAt: dto.smsOptIn ? new Date() : null,
+      consentRecordedAt: null as Date | null,
+      erasedAt: null as Date | null,
       source: actor.roles.includes('SYSTEM' as never) ? ('CLINITRACK' as const) : ('PHARMTRACK' as const),
     };
+    const before = await this.prisma.patientContactPreference.findUnique({ where: { patientId } });
+    // Keep the original consent time while consent continues.
+    data.consentRecordedAt = data.smsOptIn ? (before?.smsOptIn && before.consentRecordedAt ? before.consentRecordedAt : new Date()) : null;
+    data.erasedAt = data.phoneE164 || data.firstName ? null : (before?.erasedAt ?? null);
     const pref = await this.prisma.patientContactPreference.upsert({ where: { patientId }, create: { patientId, ...data }, update: data });
-    await this.audit.log(this.prisma, actor, 'patient-contact.set', 'PatientContactPreference', patientId, undefined, {
+    if (!pref.smsOptIn) {
+      // Withdrawn consent stops messages already waiting to go out.
+      await this.prisma.notification.updateMany({ where: { patientId, status: 'QUEUED' }, data: { status: 'SKIPPED_NO_CONSENT', toAddress: null } });
+    }
+    await this.audit.log(this.prisma, actor, 'patient-contact.set', 'PatientContactPreference', patientId, before ? { smsOptIn: before.smsOptIn } : undefined, {
       smsOptIn: pref.smsOptIn,
       language: pref.language,
     });

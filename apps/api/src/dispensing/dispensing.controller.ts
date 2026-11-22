@@ -2,6 +2,7 @@ import { Body, Controller, Get, HttpCode, Param, Post, Query } from '@nestjs/com
 import { ApiTags } from '@nestjs/swagger';
 import { DispenseStatus } from '@prisma/client';
 import { Actor, CurrentActor, IdempotencyKey, Role, Roles } from '../common/auth';
+import { PatientData } from '../common/patient-access';
 import { CancelDto } from '../prescriptions/prescriptions.dto';
 import { BillingStatusDto, DispenseDto, ReturnDto, VerifyDto } from './dispensing.dto';
 import { DispensingService } from './dispensing.service';
@@ -21,6 +22,7 @@ export class DispensingController {
   }
 
   @Get('orders/:id')
+  @PatientData('dispense-order.read')
   @Roles(...PHARMACY, Role.SYSTEM)
   get(@Param('id') id: string) {
     return this.service.get(id);
@@ -76,6 +78,7 @@ export class DispensingController {
   }
 
   @Get('controlled-register')
+  @PatientData('controlled-register.read')
   @Roles(Role.PHARMACIST)
   register(@Query('drugId') drugId?: string, @Query('from') from?: string, @Query('to') to?: string) {
     return this.service.controlledRegister({ drugId, from: from ? new Date(from) : undefined, to: to ? new Date(to) : undefined });
