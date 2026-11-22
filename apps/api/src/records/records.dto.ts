@@ -69,3 +69,8 @@ export class AssessAdrDto {
 export class MarkAdrSubmittedDto {
   @IsString() ppbReference: string;
 }
+
+export class MarkAdrAcknowledgedDto {
+  /** PPB's own case or acknowledgement number, if it gave one. Kept with the submission reference. */
+  @IsOptional() @IsString() ppbAcknowledgement?: string;
+}

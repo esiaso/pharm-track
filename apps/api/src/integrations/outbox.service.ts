@@ -97,6 +97,8 @@ export class OutboxService {
         return this.supplytrack.release(p.reservationId, key);
       case 'stock.return':
         return this.supplytrack.returnStock({ ...(p as any), idempotencyKey: key });
+      case 'stockout.report':
+        return this.supplytrack.submitStockOutReport(p, key);
       default:
         throw new IntegrationError(`No SupplyTrack route for ${type}`, undefined, false);
     }
@@ -104,6 +106,13 @@ export class OutboxService {
 
   /** Records CliniTrack's billing reference once a billable event is accepted. */
   private async afterDelivery(type: string, payload: Prisma.JsonValue, result: unknown) {
+    if (type === 'report.submitted' || type === 'stockout.report') {
+      // Keep the receiving system's reference on the report run.
+      const reference = (result as { reference?: string } | undefined)?.reference;
+      const runId = (payload as any)?.reportId as string | undefined;
+      if (reference && runId) await this.prisma.reportRun.updateMany({ where: { id: runId }, data: { externalRef: reference } });
+      return;
+    }
     if (type !== 'dispense.completed') return;
     const lineIds = ((payload as any)?.lines ?? []).map((l: any) => l.dispenseLineId as string);
     const reference = (result as { reference?: string } | undefined)?.reference;

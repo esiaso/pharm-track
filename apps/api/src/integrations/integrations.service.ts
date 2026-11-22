@@ -80,6 +80,11 @@ export class IntegrationsService {
       create: { storeId: p.storeId, hptCode, status, quantity: p.quantity },
       update: { status, quantity: p.quantity },
     });
+    // Keep stock-out history for reporting: an episode runs from stock.out until stock.low or stock.restored.
+    const at = dto.occurredAt && !Number.isNaN(Date.parse(dto.occurredAt)) ? new Date(dto.occurredAt) : new Date();
+    const open = await this.prisma.stockOutEpisode.findFirst({ where: { storeId: p.storeId, hptCode, endedAt: null } });
+    if (status === 'OUT' && !open) await this.prisma.stockOutEpisode.create({ data: { storeId: p.storeId, hptCode, startedAt: at } });
+    if (status !== 'OUT' && open) await this.prisma.stockOutEpisode.update({ where: { id: open.id }, data: { endedAt: at < open.startedAt ? open.startedAt : at } });
     return { stockAlertId: alert.id, status };
   }
 

@@ -29,6 +29,8 @@ export abstract class SupplyTrackClient {
     reference: string;
     idempotencyKey: string;
   }): Promise<void>;
+  /** Monthly stock-out report for a facility. Returns SupplyTrack's reference. */
+  abstract submitStockOutReport(report: unknown, idempotencyKey: string): Promise<{ reference?: string }>;
 }
 
 interface BatchDto {
@@ -85,5 +87,9 @@ export class HttpSupplyTrackClient extends SupplyTrackClient {
   async returnStock(req: Parameters<SupplyTrackClient['returnStock']>[0]) {
     const { idempotencyKey, ...body } = req;
     await callJson(this.base, 'POST', '/stock/returns', { idempotencyKey, token: this.token, body });
+  }
+
+  submitStockOutReport(report: unknown, idempotencyKey: string) {
+    return callJson<{ reference?: string }>(this.base, 'POST', '/reports/stock-outs', { idempotencyKey, token: this.token, body: report });
   }
 }

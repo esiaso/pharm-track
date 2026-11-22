@@ -127,3 +127,13 @@ refills). It returns a `reference` or later calls `POST /dispensing/billing-stat
 
 PharmTrack does not submit to SHA or DHA. CliniTrack does, using the ATC and HPT
 codes on every billable line, and can pull coded extracts from `/reports/*`.
+
+Once a month a pharmacist generates the **pharmacy return** for a facility,
+reviews its checks (billing failures, retired codes, antimicrobials without a
+DDD) and submits it. PharmTrack then sends one `report.submitted` event from the
+outbox (schema: [`events/report.submitted.schema.json`](events/report.submitted.schema.json)),
+idempotency key `report:<reportId>`. It carries the period, version, a summary,
+consumption by ATC/HPT code with DDDs, antimicrobial use, refills and ADR counts.
+A corrected return is a new version with `amendsReportId` set to the version it
+replaces; CliniTrack should forward the latest version to SHA/DHA and may reply
+with a `reference`, which PharmTrack stores and shows.

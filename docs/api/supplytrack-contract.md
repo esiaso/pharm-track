@@ -51,6 +51,22 @@ POST /stock/returns
   "reason": "Course stopped by doctor", "reference": "dispense-line:<uuid>" }
 ```
 
+### 6. Stock-out report
+
+```json
+POST /reports/stock-outs
+{ "reportId": "…", "reportType": "STOCK_OUT", "facilityId": "FAC-1", "period": "2026-10",
+  "version": 1, "amendsReportId": null,
+  "summary": { "itemsOut": 2, "totalDaysOut": 5.5, "stillOut": 1, "prescriptionItemsAffected": 4 },
+  "data": { "items": [ { "storeId": "STORE-OPD", "hptCode": "…", "episodes": 1,
+    "daysOut": 3.5, "outAtEnd": false, "prescriptionItemsAffected": 2 } ] } }
+```
+
+Sent monthly from the outbox when a pharmacist submits the stock-out report
+(schema: [`events/supplytrack.stockout.report.schema.json`](events/supplytrack.stockout.report.schema.json)).
+`202` with an optional `{ "reference": "…" }`. Episodes are built from the
+`stock.out` / `stock.low` / `stock.restored` events below.
+
 ### Events SupplyTrack sends to PharmTrack
 
 `POST {PHARMTRACK}/api/v1/integrations/supplytrack/events`, service account
@@ -64,7 +80,7 @@ with role `SYSTEM`, header `Idempotency-Key` (a repeat replays the first result)
 | Event | Effect in PharmTrack |
 |---|---|
 | `batch.recalled` | The batch is never allocated again. Response lists `affectedPatients` (patient, prescription, quantity, date) traced from dispense lines. Shown on the Integrations screen until a pharmacist marks it handled. |
-| `stock.low` / `stock.out` / `stock.restored` | Updates the stock alert for that store and item, shown on the Integrations screen. |
+| `stock.low` / `stock.out` / `stock.restored` | Updates the stock alert for that store and item, shown on the Integrations screen. `stock.out` opens a stock-out episode; `stock.low` or `stock.restored` closes it (time from `occurredAt`, else receipt). |
 
 Malformed payloads get `400`. JSON Schemas for what PharmTrack sends
 (`supplytrack.stock.commit`, `supplytrack.stock.return`) and accepts

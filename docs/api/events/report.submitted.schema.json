@@ -1,0 +1,256 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://synergyone/pharmtrack/events/report.submitted.schema.json",
+  "title": "report.submitted",
+  "description": "Monthly pharmacy return for one facility. CliniTrack forwards it to SHA/DHA. A later version of the same facility and period replaces the earlier one.",
+  "type": "object",
+  "properties": {
+    "reportId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "facilityId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "period": {
+      "type": "string",
+      "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+      "description": "Calendar month in Africa/Nairobi time"
+    },
+    "periodFrom": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "periodTo": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Exclusive"
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "1 for the first submission of the period, higher for amendments"
+    },
+    "amendsReportId": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "The earlier submission this one replaces"
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "submittedBy": {
+      "type": "string",
+      "minLength": 1
+    },
+    "reportType": {
+      "const": "PHARMACY_RETURN"
+    },
+    "summary": {
+      "type": "object",
+      "properties": {
+        "dispenseLines": {
+          "type": "number"
+        },
+        "products": {
+          "type": "number"
+        },
+        "quantity": {
+          "type": "number"
+        },
+        "value": {
+          "type": "number"
+        },
+        "ddds": {
+          "type": "number"
+        },
+        "antimicrobialDdds": {
+          "type": "number"
+        },
+        "refillsDispensed": {
+          "type": "number"
+        },
+        "adrsReported": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "dispenseLines",
+        "products",
+        "quantity",
+        "value",
+        "ddds",
+        "antimicrobialDdds",
+        "refillsDispensed",
+        "adrsReported"
+      ],
+      "additionalProperties": false
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "codeSystems": {
+          "type": "object",
+          "description": "Code list releases in use, e.g. WHO_ATC and PPB_HPT",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "consumption": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "hptCode": {
+                "type": "string",
+                "minLength": 3
+              },
+              "atcCode": {
+                "type": "string",
+                "pattern": "^[A-Z]\\d{2}[A-Z]{2}\\d{2}$"
+              },
+              "genericName": {
+                "type": "string"
+              },
+              "strength": {
+                "type": "string"
+              },
+              "unitOfIssue": {
+                "type": "string"
+              },
+              "quantity": {
+                "type": "number"
+              },
+              "refillQuantity": {
+                "type": "number"
+              },
+              "value": {
+                "type": "number"
+              },
+              "ddds": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "description": "WHO Defined Daily Doses; null when it cannot be computed"
+              },
+              "antimicrobial": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "hptCode",
+              "atcCode",
+              "genericName",
+              "strength",
+              "unitOfIssue",
+              "quantity",
+              "refillQuantity",
+              "value",
+              "ddds",
+              "antimicrobial"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "antimicrobials": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "atcClass": {
+                "type": "string",
+                "pattern": "^[A-Z]\\d{2}[A-Z]{2}$"
+              },
+              "quantity": {
+                "type": "number"
+              },
+              "ddds": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "productsWithoutDdd": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "atcClass",
+              "quantity",
+              "ddds",
+              "productsWithoutDdd"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "refills": {
+          "type": "object",
+          "properties": {
+            "schedulesStarted": {
+              "type": "number"
+            },
+            "refillsDispensed": {
+              "type": "number"
+            },
+            "overdueNow": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "schedulesStarted",
+            "refillsDispensed",
+            "overdueNow"
+          ],
+          "additionalProperties": false
+        },
+        "adrs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "seriousness": {
+                "type": "string"
+              },
+              "count": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "seriousness",
+              "count"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "codeSystems",
+        "consumption",
+        "antimicrobials",
+        "refills",
+        "adrs"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "reportId",
+    "facilityId",
+    "period",
+    "periodFrom",
+    "periodTo",
+    "version",
+    "amendsReportId",
+    "generatedAt",
+    "submittedBy",
+    "reportType",
+    "summary",
+    "data"
+  ],
+  "additionalProperties": false
+}

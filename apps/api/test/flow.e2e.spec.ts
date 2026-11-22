@@ -46,6 +46,11 @@ class FakeSupplyTrack extends SupplyTrackClient {
   async returnStock(req: unknown) {
     this.returns.push(req);
   }
+  stockOutReports: unknown[] = [];
+  async submitStockOutReport(report: unknown) {
+    this.stockOutReports.push(report);
+    return { reference: `ST-SOR-${this.stockOutReports.length}` };
+  }
 }
 
 class FakeClinitrack extends ClinitrackClient {
@@ -314,7 +319,7 @@ run('PharmTrack end-to-end', () => {
     const met = res.body.find((r: any) => r.hptCode === 'SAMPLE-HPT-0002');
     expect(met).toMatchObject({ atcCode: 'A10BA02', quantity: 120, refillQuantity: 60 });
     const amr = await api().get('/api/v1/reports/antimicrobial-use?facilityId=FAC-1').set(PHARMACIST).expect(200);
-    expect(amr.body).toEqual([{ atcClass: 'J01CA', quantity: 14 }]);
+    expect(amr.body).toEqual([{ atcClass: 'J01CA', quantity: 14, ddds: null, productsWithoutDdd: 1 }]); // no WHO DDD loaded in the sample data
   });
 
   it('replays a retried write with the same Idempotency-Key instead of doing it twice', async () => {
