@@ -9,10 +9,10 @@ type Tab = 'access' | 'requests' | 'retention';
 const TABS: [Tab, string][] = [['access', 'Access log'], ['requests', 'Patient requests'], ['retention', 'Retention']];
 
 type AccessRow = { id: string; patientId: string; actorId: string; actorRole: string; facilityId: string | null; action: string; purpose: string | null; path: string; at: string };
-type Counts = { smsContent: number; outboxPayloads: number; idempotencyRecords: number; contactDetails: number; accessLogRows: number };
+type Counts = { smsContent: number; outboxPayloads: number; idempotencyRecords: number; contactDetails: number; accessLogRows: number; auditLogRows: number; patients: number };
 type Retention = {
   enabled: boolean;
-  policy: { smsContentDays: number; integrationPayloadDays: number; contactAfterOptOutDays: number; accessLogDays: number };
+  policy: { smsContentDays: number; integrationPayloadDays: number; contactAfterOptOutDays: number; accessLogDays: number; auditLogDays: number; patientRecordsDays: number };
   due: Counts;
   lastRun: null | { id: string; startedAt: string; trigger: string; actorId: string | null; results: { removed: Counts } };
 };
@@ -180,6 +180,8 @@ const RULES: { key: keyof Counts; days: keyof Retention['policy']; what: string 
   { key: 'idempotencyRecords', days: 'integrationPayloadDays', what: 'Stored replies kept for retried requests' },
   { key: 'contactDetails', days: 'contactAfterOptOutDays', what: 'Phone number and first name after SMS opt-out' },
   { key: 'accessLogRows', days: 'accessLogDays', what: 'Access log entries' },
+  { key: 'auditLogRows', days: 'auditLogDays', what: 'Audit log entries' },
+  { key: 'patients', days: 'patientRecordsDays', what: "All of a patient's records (prescriptions, dispensing, allergies, ADRs, refills, SMS), counted from their last activity; shown as patients" },
 ];
 
 function RetentionTab() {
@@ -207,7 +209,7 @@ function RetentionTab() {
   return (
     <div className="stack">
       <p className="small">
-        {data.enabled ? 'Runs every night at 01:30.' : 'The nightly run is off (RETENTION_ENABLED). You can run it here.'} Prescriptions, dispensing, allergies, ADRs and the controlled drug register are never removed automatically.
+        {data.enabled ? 'Runs every night at 01:30.' : 'The nightly run is off (RETENTION_ENABLED). You can run it here.'} A patient&apos;s records are only removed once they have had no activity for the whole period, so records of patients still in care are kept. Removal cannot be undone.
         {data.lastRun && ` Last run ${dateTime(data.lastRun.startedAt)} (${data.lastRun.trigger === 'CRON' ? 'nightly' : `by ${data.lastRun.actorId}`}).`}
       </p>
       <ErrorBox error={error} />

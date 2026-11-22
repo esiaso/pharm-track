@@ -40,20 +40,23 @@ for care, under a duty of confidentiality (s.46), and to meet legal obligations
 | **Right of access** (s.26(b)) | **New:** a full JSON export of everything PharmTrack holds for a patient, including who has read their data. |
 | **Rectification** (s.40) | Allergies and ADRs can be corrected or marked entered in error; every change is audited. Prescriptions are corrected in CliniTrack. |
 | **Erasure** (s.40) | **New:** SMS contact details can be erased on request (phone number and first name removed, SMS stopped, phone numbers removed from past messages). Clinical records are kept: they are needed for care and legal registers, which s.40 allows. |
-| **Retention** (s.39) | **New:** a nightly retention job, off until `RETENTION_ENABLED=true`, with a preview and a manual run. Defaults: SMS text and number 90 days; delivered integration payloads and stored retry replies 90 days; contact details 30 days after opt-out; access log 7 years. Clinical records are never removed automatically. |
+| **Retention** (s.39) | **New:** a nightly retention job, off until `RETENTION_ENABLED=true`, with a preview and a manual run. Policy: patient records and logs are kept for **7 years**. A patient's records (prescriptions, dispensing, controlled-drug entries, allergies, ADRs, refills, SMS, contact details) are removed together once the patient has had no activity in PharmTrack for 7 years, so nothing is removed while a patient is still in care. The access log and audit log keep 7 years. Short-lived copies go sooner: SMS text and number 90 days; delivered integration payloads and stored retry replies 90 days; contact details 30 days after opt-out. |
 | **Security by design** (s.41) | SSO with roles, every write audited, idempotent integrations, dev-header sign-in refused in production. Encryption at rest and backups belong to the hosting setup (see open items). |
 | **Breach notification** (s.43: Data Commissioner within 72 hours) | The access and audit logs give the evidence needed. A breach procedure for the suite is still needed. |
-| **Data protection impact assessment** (s.31) | Needed before go-live because the system processes health data at scale. This review can feed it. |
+| **Data protection impact assessment** (s.31) | Done once for the whole SynergyOne suite (CliniTrack, PharmTrack, SupplyTrack), not per module. This review is PharmTrack's input to it. |
 | **Registration with the ODPC** (s.18, Registration Regulations 2021) | The facility (data controller) and any hosting or SMS provider (processors) need to be registered. Health care is one of the sectors that must register. |
 | **Transfers outside Kenya** (s.48 to s.50, General Regulations 2021) | Check where the database, backups and the SMS gateway are hosted. Confirm whether the regulations require this data to be processed and stored in Kenya. |
 
 ## Open items for the DPO or counsel
 
-1. **Legal retention periods for clinical records**: prescriptions, the
-   controlled drug register (Pharmacy and Poisons Act; Narcotic Drugs and
-   Psychotropic Substances Act), ADR reports and the audit log. Once known, they
-   can be added to the retention job.
-2. **Access log retention**: 7 years is a placeholder (`RETENTION_ACCESS_LOG_DAYS`).
+Decided: patient records and logs are kept for 7 years, and the DPIA is done
+for SynergyOne as a whole.
+
+1. **Controlled drug register**: check that the Narcotic Drugs and Psychotropic
+   Substances Act does not require a register entry to outlive the patient's
+   7-year period. Today it is removed with the patient's other records.
+2. **Backups** keep removed records until they expire; set backup retention to
+   match.
 3. **SMS wording**: refill messages name the medicine. On a shared phone that
    reveals health information. Consider a template without the drug name, set
    per facility in the SMS templates.
@@ -67,7 +70,7 @@ for care, under a duty of confidentiality (s.46), and to meet legal obligations
 7. **Queue screens** (dispensing queue, refill lists) are not logged per
    patient; detail screens, patient records and FHIR are. Decide whether
    list views must be logged too.
-8. **DPIA and breach procedure** for SynergyOne as a whole.
+8. **Breach procedure** for SynergyOne as a whole, alongside the suite DPIA.
 
 ## Settings
 
@@ -77,7 +80,9 @@ for care, under a duty of confidentiality (s.46), and to meet legal obligations
 | `RETENTION_SMS_CONTENT_DAYS` | 90 (min 7) | Remove SMS text and number after this |
 | `RETENTION_INTEGRATION_PAYLOAD_DAYS` | 90 (min 30) | Clear delivered CliniTrack/SupplyTrack payloads and stored retry replies |
 | `RETENTION_CONTACT_AFTER_OPT_OUT_DAYS` | 30 | Remove phone and first name this long after opt-out |
-| `RETENTION_ACCESS_LOG_DAYS` | 2555 (min 365) | Delete access log rows older than this |
+| `RETENTION_ACCESS_LOG_DAYS` | 2555 (7 years, min 365) | Delete access log rows older than this |
+| `RETENTION_AUDIT_LOG_DAYS` | 2555 (7 years, min 365) | Delete audit log rows older than this |
+| `RETENTION_PATIENT_RECORDS_DAYS` | 2555 (7 years, min 365) | Remove all of a patient's records once they have had no activity for this long (at most 500 patients per run) |
 
 ## API
 

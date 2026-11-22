@@ -216,7 +216,7 @@ run('FHIR facade and data protection end-to-end', () => {
     expect(await prisma.allergy.count({ where: { patientId: 'PAT-F1' } })).toBe(1);
   });
 
-  it('applies retention: previews, then removes old SMS text, payloads, contact details and access log rows', async () => {
+  it('applies retention: previews, then removes old SMS text, payloads, contact details, logs and patients inactive for 7 years', async () => {
     const old = new Date(Date.now() - 400 * DAY);
     const ancient = new Date(Date.now() - 8 * 365 * DAY);
     await prisma.notification.create({ data: { patientId: 'PAT-OLD', purpose: 'REFILL_DUE', body: 'Habari Juma, metformin is due', toAddress: '+254700000001', status: 'DELIVERED', dedupeKey: 'old-1', createdAt: old } });
@@ -226,20 +226,30 @@ run('FHIR facade and data protection end-to-end', () => {
     await prisma.patientContactPreference.create({ data: { patientId: 'PAT-OLD', firstName: 'Juma', phoneE164: '+254700000001', smsOptIn: false } });
     await prisma.$executeRaw`UPDATE "PatientContactPreference" SET "updatedAt" = ${old} WHERE "patientId" = 'PAT-OLD'`;
     await prisma.patientAccessLog.create({ data: { patientId: 'PAT-OLD', actorId: 'x', actorRole: 'PHARMACIST', action: 'allergies.read', path: '/x', at: ancient } });
+    await prisma.auditLog.create({ data: { actorId: 'x', actorRole: 'PHARMACIST', action: 'allergy.create', entityType: 'Allergy', entityId: 'gone', at: ancient } });
+    // A patient last seen 8 years ago: all of their records go. PAT-F1 (seen today) keeps everything.
+    const drug = await prisma.drug.findFirstOrThrow({ where: { hptCode: 'SAMPLE-HPT-0002' } });
+    await prisma.allergy.create({ data: { patientId: 'PAT-GONE', agentType: 'NON_DRUG', agentText: 'Latex', severity: 'MILD', recordedBy: 'x', recordedAt: ancient } });
+    await prisma.adverseDrugReaction.create({ data: { patientId: 'PAT-GONE', drugId: drug.id, onsetDate: ancient, description: 'Old rash', seriousness: 'NON_SERIOUS', reportedBy: 'x', reportedAt: ancient } });
+    await prisma.$executeRaw`UPDATE "Allergy" SET "updatedAt" = ${ancient} WHERE "patientId" = 'PAT-GONE'`;
 
     const preview = await api().get('/api/v1/privacy/retention').set(ADMIN).expect(200);
-    expect(preview.body.due).toEqual({ smsContent: 1, outboxPayloads: 1, idempotencyRecords: 1, contactDetails: 1, accessLogRows: 1 });
+    expect(preview.body.due).toEqual({ smsContent: 1, outboxPayloads: 1, idempotencyRecords: 1, contactDetails: 1, accessLogRows: 1, auditLogRows: 1, patients: 1 });
     expect(preview.body.enabled).toBe(false);
 
     const ran = await api().post('/api/v1/privacy/retention/run').set(ADMIN).expect(200);
-    expect(ran.body.removed).toEqual({ smsContent: 1, outboxPayloads: 1, idempotencyRecords: 1, contactDetails: 1, accessLogRows: 1 });
+    expect(ran.body.removed).toEqual({ smsContent: 1, outboxPayloads: 1, idempotencyRecords: 1, contactDetails: 1, accessLogRows: 1, auditLogRows: 1, patients: 1 });
+    expect(await prisma.allergy.count({ where: { patientId: 'PAT-GONE' } })).toBe(0);
+    expect(await prisma.adverseDrugReaction.count({ where: { patientId: 'PAT-GONE' } })).toBe(0);
+    expect(await prisma.prescription.count({ where: { patientId: 'PAT-F1' } })).toBe(1);
+    expect(await prisma.allergy.count({ where: { patientId: 'PAT-F1' } })).toBe(1);
     expect((await prisma.notification.findUniqueOrThrow({ where: { dedupeKey: 'old-1' } })).body).toBe(REDACTED_SMS);
     expect((await prisma.outboxEvent.findUniqueOrThrow({ where: { idempotencyKey: 'old-ev-1' } })).payload).toEqual({});
     expect((await prisma.outboxEvent.findUniqueOrThrow({ where: { idempotencyKey: 'old-ev-2' } })).payload).toEqual({ patientId: 'PAT-OLD' });
     expect(await prisma.patientContactPreference.findUniqueOrThrow({ where: { patientId: 'PAT-OLD' } })).toMatchObject({ phoneE164: null, firstName: null });
 
     const after = await api().get('/api/v1/privacy/retention').set(ADMIN).expect(200);
-    expect(after.body.due).toEqual({ smsContent: 0, outboxPayloads: 0, idempotencyRecords: 0, contactDetails: 0, accessLogRows: 0 });
+    expect(after.body.due).toEqual({ smsContent: 0, outboxPayloads: 0, idempotencyRecords: 0, contactDetails: 0, accessLogRows: 0, auditLogRows: 0, patients: 0 });
     expect(after.body.lastRun).toMatchObject({ trigger: 'MANUAL', actorId: 'u-dpo' });
   });
 });
