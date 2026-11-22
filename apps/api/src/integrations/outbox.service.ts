@@ -5,6 +5,7 @@ import { PrismaService, Tx } from '../prisma/prisma.service';
 import { ClinitrackClient } from './clinitrack.client';
 import { IntegrationError } from './http';
 import { SupplyTrackClient } from './supplytrack.client';
+import { jobsEnabled } from '../common/jobs';
 
 export type Destination = 'CLINITRACK' | 'SUPPLYTRACK';
 
@@ -45,6 +46,10 @@ export class OutboxService {
   }
 
   @Cron(CronExpression.EVERY_10_SECONDS)
+  async dispatchOnSchedule() {
+    if (jobsEnabled()) await this.dispatchDue();
+  }
+
   async dispatchDue(): Promise<number> {
     if (this.running) return 0;
     this.running = true;

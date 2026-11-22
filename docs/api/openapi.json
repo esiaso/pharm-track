@@ -15,6 +15,20 @@
         ]
       }
     },
+    "/api/v1/health/ready": {
+      "get": {
+        "operationId": "HealthController_ready",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Health"
+        ]
+      }
+    },
     "/api/v1/integrations/summary": {
       "get": {
         "operationId": "IntegrationsController_summary",
@@ -1784,6 +1798,114 @@
         "summary": "Delivery-report webhook for the SMS gateway.",
         "tags": [
           "refills"
+        ]
+      }
+    },
+    "/api/v1/dispensing/label-printers": {
+      "get": {
+        "operationId": "DispensingController_labelPrinters",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Stores with a Zebra label printer on the network (LABEL_PRINTERS).",
+        "tags": [
+          "dispensing"
+        ]
+      }
+    },
+    "/api/v1/dispensing/orders/{id}/labels.zpl": {
+      "get": {
+        "operationId": "DispensingController_labelsZpl",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lineIds",
+            "required": false,
+            "in": "query",
+            "description": "Comma-separated dispense line ids; default all lines on the order.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "patientName",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maxLength": 60,
+              "type": "string"
+            }
+          },
+          {
+            "name": "copies",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 20,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Zebra (ZPL) labels for the dispensed lines, as a file to send to a printer.",
+        "tags": [
+          "dispensing"
+        ]
+      }
+    },
+    "/api/v1/dispensing/orders/{id}/labels/print": {
+      "post": {
+        "operationId": "DispensingController_printLabels",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LabelRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Sends the labels to the store's network Zebra printer.",
+        "tags": [
+          "dispensing"
         ]
       }
     },
@@ -3988,6 +4110,28 @@
           "providerMessageId",
           "status"
         ]
+      },
+      "LabelRequestDto": {
+        "type": "object",
+        "properties": {
+          "lineIds": {
+            "description": "Only these dispensed lines; default all lines on the order.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "patientName": {
+            "type": "string",
+            "description": "Patient name to print (PharmTrack holds only the CliniTrack patient id).",
+            "maxLength": 60
+          },
+          "copies": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 20
+          }
+        }
       },
       "VerifyDto": {
         "type": "object",

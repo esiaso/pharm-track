@@ -8,6 +8,7 @@ import { backoffMs } from '../integrations/outbox.service';
 import { SmsProvider } from '../integrations/sms.provider';
 import { PrismaService } from '../prisma/prisma.service';
 import { ContactPreferenceDto, DeliveryReportDto, FacilityProfileDto, SmsTemplateDto } from './refills.dto';
+import { jobsEnabled } from '../common/jobs';
 
 const MAX_SMS_ATTEMPTS = 5;
 
@@ -70,6 +71,10 @@ export class NotificationsService {
 
   /** Sends queued messages, retrying failures with backoff. */
   @Cron(CronExpression.EVERY_MINUTE)
+  async sendDueOnSchedule() {
+    if (jobsEnabled()) await this.sendDue();
+  }
+
   async sendDue(): Promise<number> {
     if (this.running) return 0;
     this.running = true;

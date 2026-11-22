@@ -1,0 +1,80 @@
+# PharmTrack on one machine: PostgreSQL, the API, a jobs worker and the web app.
+# For a pilot or a demo. Production settings go in .env (see docs/DEPLOYMENT.md).
+#
+#   cp apps/api/.env.example .env   # then edit
+#   docker compose up -d --build
+#
+# The web app is on http://localhost:3001; the API on http://localhost:3000.
+name: pharmtrack
+
+x-api: &api
+  build:
+    context: .
+    dockerfile: apps/api/Dockerfile
+  image: pharmtrack-api
+  env_file:
+    - path: .env
+      required: false
+  environment: &api-env
+    DATABASE_URL: postgresql://pharmtrack:${POSTGRES_PASSWORD:-pharmtrack}@db:5432/pharmtrack
+    NODE_ENV: ${NODE_ENV:-production}
+  depends_on:
+    db:
+      condition: service_healthy
+  restart: unless-stopped
+
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: pharmtrack
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pharmtrack}
+      POSTGRES_DB: pharmtrack
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U pharmtrack']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  # Serves requests. Applies migrations on start; jobs run in the worker.
+  api:
+    <<: *api
+    environment:
+      <<: *api-env
+      RUN_MIGRATIONS: 'true'
+      JOBS_ENABLED: 'false'
+    ports:
+      - '3000:3000'
+
+  # Runs the scheduled jobs (outbox, SMS, refill reminders, retention). Keep exactly one.
+  worker:
+    <<: *api
+    environment:
+      <<: *api-env
+      JOBS_ENABLED: 'true'
+      PORT: '3000'
+    depends_on:
+      api:
+        condition: service_healthy
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        PHARMTRACK_API_URL: http://api:3000
+        NEXT_PUBLIC_SSO_AUTHORITY: ${NEXT_PUBLIC_SSO_AUTHORITY:-}
+        NEXT_PUBLIC_SSO_CLIENT_ID: ${NEXT_PUBLIC_SSO_CLIENT_ID:-}
+    image: pharmtrack-web
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - '3001:3001'
+    restart: unless-stopped
+
+volumes:
+  pgdata:
