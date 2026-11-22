@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { ssoConfigFromEnv } from './common/sso';
@@ -10,7 +11,9 @@ export async function createApp() {
     throw new Error('AUTH_MODE=dev-headers is not allowed in production. Set AUTH_MODE=oidc and the SSO_* settings.');
   }
   if (process.env.AUTH_MODE === 'oidc') ssoConfigFromEnv(); // fail fast on missing settings
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  // Content imports send whole CSV files (the WHO ATC/DDD index is under 1 MB; HPT lists can be larger).
+  app.useBodyParser('json', { limit: '25mb' });
   app.setGlobalPrefix('api/v1', { exclude: ['health'] });
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
   const config = new DocumentBuilder()

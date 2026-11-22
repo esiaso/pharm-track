@@ -113,13 +113,13 @@ export class SafetyService {
     return new Map(entries.map((e) => [e.drugId, e.status]));
   }
 
-  /** Loads only the rules whose ATC prefix could match one of the codes involved. */
+  /** Loads only ACTIVE rules whose ATC prefix could match one of the codes involved (draft and retired rule sets are ignored). */
   private async loadRules(atcCodes: string[], drugIds: string[]): Promise<SafetyRules> {
     const prefixes = [...new Set(atcCodes.flatMap((c) => atcHierarchy(c)))];
     const [interactions, contraindications, doseLimits] = await Promise.all([
-      this.prisma.drugInteraction.findMany({ where: { OR: [{ atcPrefixA: { in: prefixes } }, { atcPrefixB: { in: prefixes } }] } }),
-      this.prisma.contraindication.findMany({ where: { atcPrefix: { in: prefixes } } }),
-      this.prisma.doseLimitRule.findMany({ where: { OR: [{ drugId: { in: drugIds } }, { atcPrefix: { in: prefixes } }] } }),
+      this.prisma.drugInteraction.findMany({ where: { status: 'ACTIVE', OR: [{ atcPrefixA: { in: prefixes } }, { atcPrefixB: { in: prefixes } }] } }),
+      this.prisma.contraindication.findMany({ where: { status: 'ACTIVE', atcPrefix: { in: prefixes } } }),
+      this.prisma.doseLimitRule.findMany({ where: { status: 'ACTIVE', OR: [{ drugId: { in: drugIds } }, { atcPrefix: { in: prefixes } }] } }),
     ]);
     return {
       interactions,

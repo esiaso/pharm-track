@@ -34,10 +34,27 @@ model AtcCode {
   dddRoute   String?
   /// Code-set release this row came from, e.g. "WHO-ATC-2026".
   release    String
+  /// Set when a full release no longer contains this code. Existing drugs keep it until re-coded.
+  retiredInRelease String?
   updatedAt  DateTime  @updatedAt
   drugs      Drug[]
+  /// All DDDs WHO publishes for this code (one per route / form). `ddd` above is the first (oral preferred).
+  ddds       AtcDdd[]
 
   @@index([parentCode])
+}
+
+model AtcDdd {
+  id      String  @id @default(uuid())
+  code    String
+  atc     AtcCode @relation(fields: [code], references: [code], onDelete: Cascade)
+  ddd     Decimal
+  unit    String
+  route   String
+  note    String  @default("")
+  release String
+
+  @@unique([code, route, unit, note])
 }
 
 /// Kenya Pharmacy and Poisons Board Health Products and Technologies code list.
@@ -48,6 +65,8 @@ model HptCode {
   /// Registration status as published by PPB (e.g. REGISTERED, RETAINED, WITHDRAWN).
   ppbStatus   String?
   release     String
+  /// Set when a full release no longer contains this code.
+  retiredInRelease String?
   updatedAt   DateTime @updatedAt
   drug        Drug?
 }
@@ -57,9 +76,13 @@ model CodeSetImport {
   id          String     @id @default(uuid())
   codeSystem  CodeSystem
   release     String
+  /// FULL: the release is complete, so codes missing from it are marked retired. PARTIAL: only adds or updates.
+  mode        ImportMode @default(PARTIAL)
   rowsTotal   Int
   rowsCreated Int
   rowsUpdated Int
+  rowsUnchanged Int      @default(0)
+  rowsRetired Int        @default(0)
   rowsFailed  Int
   importedBy  String
   importedAt  DateTime   @default(now())
@@ -69,6 +92,13 @@ model CodeSetImport {
 enum CodeSystem {
   WHO_ATC
   PPB_HPT
+  DRUG_MASTER
+  FACILITY_FORMULARY
+}
+
+enum ImportMode {
+  FULL
+  PARTIAL
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -206,9 +236,15 @@ model DrugInteraction {
   description String
   management  String?
   source      String?
+  status      RuleStatus          @default(ACTIVE)
+  ruleSetId   String?
+  ruleSet     RuleSet?            @relation(fields: [ruleSetId], references: [id])
+  /// Row identifier in the source knowledge base, for traceability.
+  externalRef String?
 
   @@index([atcPrefixA])
   @@index([atcPrefixB])
+  @@index([ruleSetId])
 }
 
 enum InteractionSeverity {
@@ -226,8 +262,14 @@ model Contraindication {
   diagnosisPrefix String
   severity        AlertSeverity
   rationale       String
+  status      RuleStatus          @default(ACTIVE)
+  ruleSetId   String?
+  ruleSet     RuleSet?            @relation(fields: [ruleSetId], references: [id])
+  /// Row identifier in the source knowledge base, for traceability.
+  externalRef String?
 
   @@index([atcPrefix])
+  @@index([ruleSetId])
 }
 
 enum DiagnosisSystem {
@@ -256,6 +298,53 @@ model DoseLimitRule {
   maxDailyDose      Decimal?
   severity          AlertSeverity @default(WARNING)
   note              String?
+  status      RuleStatus          @default(ACTIVE)
+  ruleSetId   String?
+  ruleSet     RuleSet?            @relation(fields: [ruleSetId], references: [id])
+  /// Row identifier in the source knowledge base, for traceability.
+  externalRef String?
+
+  @@index([ruleSetId])
+}
+
+/// A batch of safety rules from one source (a knowledge base release or the
+/// Medicines and Therapeutics Committee). Imported as DRAFT; only ACTIVE rules
+/// are used by the safety check. A second pharmacist must approve activation.
+model RuleSet {
+  id                String           @id @default(uuid())
+  kind              RuleKind
+  name              String
+  /// e.g. "Facility MTC", a knowledge base vendor; activating a set retires the previous active set of the same kind and source.
+  source            String
+  version           String
+  status            RuleStatus       @default(DRAFT)
+  notes             String?
+  rowsTotal         Int
+  rowsFailed        Int
+  errors            Json?
+  importedBy        String
+  importedAt        DateTime         @default(now())
+  approvedBy        String?
+  approvedAt        DateTime?
+  retiredBy         String?
+  retiredAt         DateTime?
+  interactions      DrugInteraction[]
+  contraindications Contraindication[]
+  doseLimits        DoseLimitRule[]
+
+  @@index([kind, source, status])
+}
+
+enum RuleKind {
+  INTERACTION
+  CONTRAINDICATION
+  DOSE_LIMIT
+}
+
+enum RuleStatus {
+  DRAFT
+  ACTIVE
+  RETIRED
 }
 
 enum AlertSeverity {
