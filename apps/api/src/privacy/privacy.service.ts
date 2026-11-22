@@ -7,6 +7,7 @@ import { cutoff, MAX_PATIENTS_PER_RUN, REDACTED_SMS, RetentionPolicy, retentionF
 import { Tx } from '../prisma/prisma.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AccessLogQuery } from './privacy.dto';
+import { jobsEnabled } from '../common/jobs';
 
 export type RetentionCounts = {
   smsContent: number;
@@ -224,7 +225,7 @@ export class PrivacyService {
   /** Daily at 01:30 Nairobi time, when RETENTION_ENABLED=true. */
   @Cron('30 22 * * *', { timeZone: 'UTC' })
   async scheduled() {
-    if (process.env.RETENTION_ENABLED !== 'true') return;
+    if (process.env.RETENTION_ENABLED !== 'true' || !jobsEnabled()) return;
     try {
       const r = await this.runRetention('CRON');
       this.logger.log(`Retention run ${r.id}: ${JSON.stringify(r.removed)}`);

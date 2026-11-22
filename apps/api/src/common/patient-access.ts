@@ -73,6 +73,8 @@ export class PatientAccessInterceptor implements NestInterceptor {
             if (!actor) return body;
             const ids = collectPatientIds(body);
             for (const id of patientIdsFromRequest(req)) ids.add(id);
+            // Handlers whose body is not JSON (files) name the patients on the request.
+            for (const id of (req.patientAccess as string[] | undefined) ?? []) ids.add(id);
             if (!ids.size) return body;
             const purpose = typeof req.headers['x-purpose-of-use'] === 'string' ? req.headers['x-purpose-of-use'].slice(0, 40).toUpperCase() : null;
             const path = String(req.originalUrl ?? req.url ?? '').slice(0, 500);

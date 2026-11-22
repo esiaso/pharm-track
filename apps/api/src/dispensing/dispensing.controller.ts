@@ -1,10 +1,12 @@
-import { Body, Controller, Get, HttpCode, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Param, Post, Query, Req, Res } from '@nestjs/common';
+import type { Request, Response } from 'express';
 import { ApiTags } from '@nestjs/swagger';
 import { DispenseStatus } from '@prisma/client';
 import { Actor, CurrentActor, IdempotencyKey, Role, Roles } from '../common/auth';
 import { PatientData } from '../common/patient-access';
 import { CancelDto } from '../prescriptions/prescriptions.dto';
-import { BillingStatusDto, DispenseDto, ReturnDto, VerifyDto } from './dispensing.dto';
+import { BillingStatusDto, DispenseDto, LabelQuery, LabelRequestDto, ReturnDto, VerifyDto } from './dispensing.dto';
+import { LabelsService } from './labels.service';
 import { DispensingService } from './dispensing.service';
 
 const PHARMACY = [Role.PHARMACIST, Role.PHARMACY_TECHNICIAN];
@@ -12,7 +14,38 @@ const PHARMACY = [Role.PHARMACIST, Role.PHARMACY_TECHNICIAN];
 @ApiTags('dispensing')
 @Controller('dispensing')
 export class DispensingController {
-  constructor(private readonly service: DispensingService) {}
+  constructor(
+    private readonly service: DispensingService,
+    private readonly labels: LabelsService,
+  ) {}
+
+  /** Stores with a Zebra label printer on the network (LABEL_PRINTERS). */
+  @Get('label-printers')
+  @Roles(...PHARMACY)
+  labelPrinters() {
+    return { stores: this.labels.configuredStores() };
+  }
+
+  /** Zebra (ZPL) labels for the dispensed lines, as a file to send to a printer. */
+  @Get('orders/:id/labels.zpl')
+  @PatientData('labels.download')
+  @Roles(...PHARMACY)
+  async labelsZpl(@Param('id') id: string, @Query() q: LabelQuery, @Req() req: Request & { patientAccess?: string[] }, @Res({ passthrough: true }) res: Response) {
+    const r = await this.labels.zpl(id, { lineIds: q.lineIds?.split(',').filter(Boolean), patientName: q.patientName, copies: q.copies });
+    res.setHeader('Content-Type', 'application/vnd.zebra.zpl; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="labels-${id.slice(0, 8)}.zpl"`);
+    req.patientAccess = [r.patientId]; // the body is plain text, so name the patient for the access log
+    return r.zpl;
+  }
+
+  /** Sends the labels to the store's network Zebra printer. */
+  @Post('orders/:id/labels/print')
+  @HttpCode(200)
+  @PatientData('labels.print')
+  @Roles(...PHARMACY)
+  printLabels(@Param('id') id: string, @Body() dto: LabelRequestDto, @CurrentActor() actor: Actor) {
+    return this.labels.print(id, dto, actor);
+  }
 
   @Get('queue')
   @Roles(...PHARMACY)

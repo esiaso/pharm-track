@@ -1,4 +1,4 @@
-import { Controller, Get, Module } from '@nestjs/common';
+import { Controller, Get, Module, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ScheduleModule } from '@nestjs/schedule';
@@ -9,7 +9,7 @@ import { DispensingModule } from './dispensing/dispensing.module';
 import { FormularyModule } from './formulary/formulary.module';
 import { IntegrationsModule } from './integrations/integrations.module';
 import { PrescriptionsModule } from './prescriptions/prescriptions.module';
-import { PrismaModule } from './prisma/prisma.service';
+import { PrismaModule, PrismaService } from './prisma/prisma.service';
 import { RecordsModule } from './records/records.module';
 import { RefillsModule } from './refills/refills.module';
 import { ReportsModule } from './reports/reports.module';
@@ -21,9 +21,23 @@ import { PrivacyModule } from './privacy/privacy.module';
 
 @Controller()
 class HealthController {
+  constructor(private readonly prisma: PrismaService) {}
+
+  /** Liveness: the process is up. */
   @Get('health')
   health() {
     return { status: 'ok', service: 'pharmtrack' };
+  }
+
+  /** Readiness: the database answers and migrations are applied. 503 otherwise. */
+  @Get('health/ready')
+  async ready() {
+    try {
+      await this.prisma.$queryRaw`SELECT 1 FROM "PatientAccessLog" LIMIT 1`;
+      return { status: 'ready', service: 'pharmtrack' };
+    } catch {
+      throw new ServiceUnavailableException('Database is not reachable or not migrated.');
+    }
   }
 }
 

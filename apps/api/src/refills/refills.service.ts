@@ -7,6 +7,7 @@ import { daysOfSupply, DEFAULT_REFILL_POLICY, refillStatus, reminderToSend, sche
 import { num, PrismaService, Tx } from '../prisma/prisma.service';
 import { NotificationsService } from './notifications.service';
 import { RequestRefillDto } from './refills.dto';
+import { jobsEnabled } from '../common/jobs';
 
 const OPEN: RefillStatus[] = ['UPCOMING', 'DUE', 'OVERDUE'];
 
@@ -102,6 +103,10 @@ export class RefillsService {
    * SMS (before due, on the due date, when overdue).
    */
   @Cron('0 7 * * *', { timeZone: 'Africa/Nairobi' })
+  async remindersOnSchedule() {
+    if (jobsEnabled()) await this.runDailyReminders();
+  }
+
   async runDailyReminders(today = new Date()) {
     const schedules = await this.prisma.refillSchedule.findMany({
       where: { status: { in: OPEN } },

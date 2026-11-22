@@ -5,7 +5,7 @@ import { useParams } from 'next/navigation';
 import { useMemo, useState } from 'react';
 import { SafetyAlerts } from '../../../components/SafetyAlerts';
 import { Badge, Dl, Empty, ErrorBox, Field } from '../../../components/ui';
-import { api, ApiError, useApi } from '../../../lib/api';
+import { api, ApiError, download, useApi } from '../../../lib/api';
 import { date, dateTime, label, n } from '../../../lib/format';
 import { useSession } from '../../../lib/session';
 import type { Alert, DispenseOrder, Drug, PrescriptionItem } from '../../../lib/types';
@@ -99,8 +99,10 @@ export default function OrderPage() {
       <h2>Dispensed</h2>
       <DispensedLines order={order} onChanged={(msg) => run(async () => {}, msg)} />
 
+      {order.lines.length > 0 && <ZebraLabels orderId={id} storeId={order.storeId} onDone={(msg) => setNotice(msg)} onError={setActionError} />}
+
       <div className="row no-print">
-        {order.lines.length > 0 && <button onClick={() => window.print()}>Print labels</button>}
+        {order.lines.length > 0 && <button onClick={() => window.print()}>Print labels (A4 / browser)</button>}
         {order.lines.length > 0 && (
           <button onClick={() => run(() => api(`/dispensing/orders/${id}/notify-ready`, { body: {} }), 'Collection SMS queued (sent only if the patient opted in).')}>
             Send “ready for collection” SMS
@@ -438,6 +440,50 @@ function CancelButton({ onCancel }: { onCancel: (reason: string) => void }) {
       <input placeholder="Reason for cancelling" value={reason} onChange={(e) => setReason(e.target.value)} />
       <button className="danger" disabled={reason.trim().length < 3} onClick={() => onCancel(reason)}>Confirm cancel</button>
       <button onClick={() => setOpen(false)}>Keep</button>
+    </div>
+  );
+}
+
+/** Zebra label printing: straight to the store's network printer, or a .zpl file. */
+function ZebraLabels({ orderId, storeId, onDone, onError }: { orderId: string; storeId: string; onDone: (msg: string) => void; onError: (e: string | null) => void }) {
+  const printers = useApi<{ stores: string[] }>('/dispensing/label-printers');
+  const [patientName, setPatientName] = useState('');
+  const [copies, setCopies] = useState(1);
+  const [busy, setBusy] = useState(false);
+  const hasPrinter = !!printers.data?.stores.includes(storeId);
+  const body = { ...(patientName.trim() ? { patientName: patientName.trim() } : {}), copies };
+
+  async function print() {
+    setBusy(true);
+    onError(null);
+    try {
+      const r = await api<{ printed: number }>(`/dispensing/orders/${orderId}/labels/print`, { body });
+      onDone(`Sent ${r.printed} label${r.printed === 1 ? '' : 's'}${copies > 1 ? ` x${copies}` : ''} to the ${storeId} Zebra printer.`);
+    } catch (e) {
+      onError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function downloadZpl() {
+    onError(null);
+    const q = new URLSearchParams({ copies: String(copies), ...(body.patientName ? { patientName: body.patientName } : {}) });
+    download(`/dispensing/orders/${orderId}/labels.zpl?${q}`, `labels-${orderId.slice(0, 8)}.zpl`).catch((e) => onError((e as Error).message));
+  }
+
+  return (
+    <div className="card stack no-print">
+      <h3>Zebra labels</h3>
+      <div className="row" style={{ alignItems: 'flex-end' }}>
+        <Field label="Patient name on the label (optional)"><input value={patientName} maxLength={60} onChange={(e) => setPatientName(e.target.value)} placeholder="Patient id is printed if left blank" /></Field>
+        <Field label="Copies"><input type="number" min={1} max={20} value={copies} onChange={(e) => setCopies(Math.max(1, Math.min(20, Number(e.target.value) || 1)))} style={{ width: 80 }} /></Field>
+      </div>
+      <div className="row">
+        {hasPrinter && <button className="primary" disabled={busy} onClick={() => void print()}>Print on Zebra ({storeId})</button>}
+        <button onClick={downloadZpl}>Download ZPL file</button>
+      </div>
+      {!hasPrinter && printers.data && <p className="small muted">No network label printer is set up for {storeId}. Download the file and send it to a USB Zebra printer, or ask an administrator to add the store to LABEL_PRINTERS.</p>}
     </div>
   );
 }

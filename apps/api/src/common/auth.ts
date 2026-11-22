@@ -61,7 +61,7 @@ export class RolesGuard implements CanActivate {
 
   async canActivate(ctx: ExecutionContext): Promise<boolean> {
     const req = ctx.switchToHttp().getRequest();
-    if (req.path === '/health' || req.url?.startsWith('/docs')) return true;
+    if (req.path === '/health' || req.path === '/health/ready' || req.url?.startsWith('/docs')) return true;
     const actor = await resolveActor(req.headers);
     if (!actor) throw new UnauthorizedException('Missing or invalid credentials.');
     req.actor = actor;

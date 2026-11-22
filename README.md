@@ -10,6 +10,7 @@ SMS reminders.
 - Architecture, workflows, phased plan: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 - Integration contracts: [CliniTrack](docs/api/clinitrack-contract.md) · [SupplyTrack](docs/api/supplytrack-contract.md) · [OpenAPI](docs/api/openapi.json)
 - FHIR R4 facade: [docs/FHIR.md](docs/FHIR.md) · Data protection review: [docs/DATA-PROTECTION.md](docs/DATA-PROTECTION.md)
+- Deployment (Docker, settings, Zebra printers): [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
 
 ## Stack
 
@@ -27,11 +28,15 @@ npm run dev:api                               # http://localhost:3000, Swagger a
 npm run dev:web                               # http://localhost:3001
 ```
 
+Or run everything in Docker (PostgreSQL, API, jobs worker, web app):
+`NODE_ENV=development docker compose up -d --build`. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
+for production settings.
+
 ## Web app
 
 The pharmacy web app (`apps/web`) has:
 
-- **Dispensing**: the queue per store, and an order screen to verify (safety checks with override reasons), dispense (quantities, generic substitutes, controlled-drug witness, labels, counselling), print labels, send the collection SMS, record returns and cancel.
+- **Dispensing**: the queue per store, and an order screen to verify (safety checks with override reasons), dispense (quantities, generic substitutes, controlled-drug witness, labels, counselling), print labels (in the browser, or ZPL to a Zebra printer on the network or as a file), send the collection SMS, record returns and cancel.
 - **Refills**: due, overdue and upcoming refills for the facility, start a refill, see fills and SMS sent.
 - **Patients**: allergies (record, confirm), medication history, adverse drug reactions with PPB report download.
 - **Formulary**: search by name, ATC or HPT code, edit with a reason (versioned), facility status, prices, version history.

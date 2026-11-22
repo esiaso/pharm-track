@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { ArrayMinSize, IsArray, IsIn, IsNumber, IsOptional, IsPositive, IsString, MinLength, ValidateNested } from 'class-validator';
+import { ArrayMinSize, IsArray, IsIn, IsInt, IsNumber, IsOptional, IsPositive, IsString, Max, MaxLength, Min, MinLength, ValidateNested } from 'class-validator';
 import { OverrideDto } from '../safety/safety.dto';
 
 export class VerifyDto {
@@ -38,4 +38,19 @@ export class BillingStatusLineDto {
 
 export class BillingStatusDto {
   @IsArray() @ValidateNested({ each: true }) @Type(() => BillingStatusLineDto) lines: BillingStatusLineDto[];
+}
+
+export class LabelRequestDto {
+  /** Only these dispensed lines; default all lines on the order. */
+  @IsOptional() @IsArray() @IsString({ each: true }) lineIds?: string[];
+  /** Patient name to print (PharmTrack holds only the CliniTrack patient id). */
+  @IsOptional() @IsString() @MaxLength(60) patientName?: string;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(20) copies?: number;
+}
+
+export class LabelQuery {
+  /** Comma-separated dispense line ids; default all lines on the order. */
+  @IsOptional() @IsString() lineIds?: string;
+  @IsOptional() @IsString() @MaxLength(60) patientName?: string;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(20) copies?: number;
 }

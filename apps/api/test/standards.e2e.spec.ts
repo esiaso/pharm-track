@@ -6,6 +6,7 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { PrismaClient } from '@prisma/client';
+import { createServer, Server } from 'node:net';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { addDays } from '../src/domain/dispensing';
@@ -57,8 +58,18 @@ run('FHIR facade and data protection end-to-end', () => {
   let prisma: PrismaClient;
   const sms = new FakeSms();
   let rx: any;
+  // A stand-in Zebra printer: collects what arrives on its raw port.
+  const printed: string[] = [];
+  let printer: Server;
 
   beforeAll(async () => {
+    printer = createServer((sock) => {
+      let buf = '';
+      sock.on('data', (d) => (buf += d.toString('utf8')));
+      sock.on('end', () => printed.push(buf));
+    });
+    await new Promise<void>((r) => printer.listen(0, '127.0.0.1', () => r()));
+    process.env.LABEL_PRINTERS = JSON.stringify({ 'STORE-1': `127.0.0.1:${(printer.address() as any).port}` });
     prisma = new PrismaClient();
     const tables = await prisma.$queryRaw<{ tablename: string }[]>`SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename <> '_prisma_migrations'`;
     await prisma.$executeRawUnsafe(`TRUNCATE ${tables.map((t) => `"${t.tablename}"`).join(', ')} CASCADE`);
@@ -94,6 +105,8 @@ run('FHIR facade and data protection end-to-end', () => {
   });
 
   afterAll(async () => {
+    delete process.env.LABEL_PRINTERS;
+    printer?.close();
     await app?.close();
     await prisma?.$disconnect();
   });
@@ -251,5 +264,33 @@ run('FHIR facade and data protection end-to-end', () => {
     const after = await api().get('/api/v1/privacy/retention').set(ADMIN).expect(200);
     expect(after.body.due).toEqual({ smsContent: 0, outboxPayloads: 0, idempotencyRecords: 0, contactDetails: 0, accessLogRows: 0, auditLogRows: 0, patients: 0 });
     expect(after.body.lastRun).toMatchObject({ trigger: 'MANUAL', actorId: 'u-dpo' });
+  });
+
+  it('makes Zebra labels for a dispensed order, as a file or sent to the store printer', async () => {
+    const orderId = rx.dispenseOrders[0].id;
+    await prisma.facilityProfile.upsert({ where: { facilityId: 'FAC-1' }, create: { facilityId: 'FAC-1', name: 'Kisumu Hospital Pharmacy', phone: '0700 000 000' }, update: {} });
+    await prisma.patientAccessLog.deleteMany();
+
+    const file = await api().get(`/api/v1/dispensing/orders/${orderId}/labels.zpl?patientName=Amina%20Otieno&copies=2`).set(PHARMACIST).expect(200);
+    expect(file.headers['content-type']).toMatch(/application\/vnd\.zebra\.zpl/);
+    expect(file.headers['content-disposition']).toMatch(/labels-.*\.zpl/);
+    expect(file.text).toMatch(/^\^XA/);
+    expect(file.text).toContain('For: Amina Otieno');
+    expect(file.text).toContain('Metformin');
+    expect(file.text).toContain('Batch B1');
+    expect(file.text).toContain('^PQ2');
+    expect(file.text).toContain('Kisumu Hospital Pharmacy');
+    expect(await prisma.patientAccessLog.count({ where: { patientId: 'PAT-F1', action: 'labels.download' } })).toBe(1);
+
+    const stores = await api().get('/api/v1/dispensing/label-printers').set(PHARMACIST).expect(200);
+    expect(stores.body).toEqual({ stores: ['STORE-1'] });
+    const res = await api().post(`/api/v1/dispensing/orders/${orderId}/labels/print`).set(PHARMACIST).send({}).expect(200);
+    expect(res.body).toMatchObject({ printed: 1, storeId: 'STORE-1' });
+    for (let i = 0; i < 20 && !printed.length; i++) await new Promise((r) => setTimeout(r, 25));
+    expect(printed[0]).toMatch(/^\^XA[\s\S]*\^XZ$/);
+    expect(printed[0]).toContain('For: PAT-F1');
+    expect(await prisma.auditLog.count({ where: { action: 'labels.print', entityId: orderId } })).toBe(1);
+
+    await api().post(`/api/v1/dispensing/orders/${orderId}/labels/print`).set(PHARMACIST).send({ copies: 50 }).expect(400);
   });
 });
