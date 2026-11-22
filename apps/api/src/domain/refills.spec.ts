@@ -1,0 +1,71 @@
+import { daysOfSupply, isEarlyRefill, proportionOfDaysCovered, refillStatus, reminderToSend, scheduleAfterFill } from './refills';
+import { normaliseKenyanMobile, renderTemplate } from './sms';
+
+const d = (s: string) => new Date(`${s}T00:00:00Z`);
+
+describe('refill schedule', () => {
+  const base = { refillsAuthorised: 2, refillsUsed: 0, expiresAt: d('2027-05-22'), graceDays: 3 };
+
+  it('computes days of supply', () => {
+    expect(daysOfSupply({ quantity: 60, unitsPerDose: 1, frequencyPerDay: 2, durationDays: 0 })).toBe(30);
+    expect(daysOfSupply({ quantity: 1, frequencyPerDay: 2, durationDays: 14 })).toBe(14);
+  });
+
+  it('sets the next due date and window after the initial fill', () => {
+    const s = scheduleAfterFill(base, { dispensedAt: d('2026-11-22'), daysOfSupply: 30, isRefill: false });
+    expect(s.nextDueDate).toEqual(d('2026-12-22'));
+    expect(s.earliestRefillDate).toEqual(d('2026-12-19'));
+    expect(s.refillsUsed).toBe(0);
+    expect(s.status).toBe('UPCOMING');
+  });
+
+  it('moves through UPCOMING, DUE and OVERDUE', () => {
+    const s = scheduleAfterFill(base, { dispensedAt: d('2026-11-22'), daysOfSupply: 30, isRefill: false });
+    expect(refillStatus(s, d('2026-12-10'))).toBe('UPCOMING');
+    expect(refillStatus(s, d('2026-12-19'))).toBe('DUE');
+    expect(refillStatus(s, d('2026-12-25'))).toBe('DUE');
+    expect(refillStatus(s, d('2026-12-26'))).toBe('OVERDUE');
+    expect(isEarlyRefill(s, d('2026-12-15'))).toBe(true);
+    expect(isEarlyRefill(s, d('2026-12-19'))).toBe(false);
+  });
+
+  it('completes when all refills are used and expires after validity', () => {
+    const s = scheduleAfterFill({ ...base, refillsUsed: 1 }, { dispensedAt: d('2027-01-20'), daysOfSupply: 30, isRefill: true });
+    expect(s.refillsUsed).toBe(2);
+    expect(s.status).toBe('COMPLETED');
+    const t = scheduleAfterFill(base, { dispensedAt: d('2027-05-01'), daysOfSupply: 30, isRefill: false });
+    expect(refillStatus(t, d('2027-06-10'))).toBe('EXPIRED');
+  });
+
+  it('picks the right reminder for the day', () => {
+    const s = scheduleAfterFill(base, { dispensedAt: d('2026-11-22'), daysOfSupply: 30, isRefill: false });
+    expect(reminderToSend(s, d('2026-12-19'))).toBe('REFILL_REMINDER');
+    expect(reminderToSend(s, d('2026-12-20'))).toBeNull();
+    expect(reminderToSend(s, d('2026-12-22'))).toBe('REFILL_DUE');
+    expect(reminderToSend(s, d('2026-12-27'))).toBe('REFILL_OVERDUE');
+  });
+
+  it('computes proportion of days covered with carry-over', () => {
+    const pdc = proportionOfDaysCovered(
+      [
+        { dispensedAt: d('2026-01-01'), daysOfSupply: 30 },
+        { dispensedAt: d('2026-01-28'), daysOfSupply: 30 }, // early: coverage carries over to Jan 31
+      ],
+      d('2026-01-01'),
+      d('2026-03-01'),
+    );
+    expect(pdc).toBeCloseTo(60 / 60, 5);
+  });
+});
+
+describe('sms helpers', () => {
+  it('renders templates', () => {
+    expect(renderTemplate('Hi {{ name }}, {{x}}', { name: 'Amina' })).toBe('Hi Amina, ');
+  });
+  it('normalises Kenyan mobiles', () => {
+    expect(normaliseKenyanMobile('0712 345 678')).toBe('+254712345678');
+    expect(normaliseKenyanMobile('+254 110 345678')).toBe('+254110345678');
+    expect(normaliseKenyanMobile('254712345678')).toBe('+254712345678');
+    expect(normaliseKenyanMobile('0612345678')).toBeNull();
+  });
+});

@@ -1,0 +1,752 @@
+// PharmTrack data model (PostgreSQL).
+//
+// PharmTrack owns: drug master / formulary, drug coding (WHO ATC + PPB HPT),
+// medication-safety rules and records, prescriptions received from CliniTrack,
+// the dispensing workflow, and refill tracking / patient SMS reminders.
+// Stock levels and batches live in SupplyTrack; invoices live in CliniTrack;
+// patients are mastered in CliniTrack. We only keep references to those here.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Reference code sets
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// WHO ATC classification. One row per node of the 5-level hierarchy,
+/// e.g. J (1) > J01 (2) > J01C (3) > J01CA (4) > J01CA04 (5, amoxicillin).
+model AtcCode {
+  code       String    @id
+  level      Int // 1..5
+  name       String
+  parentCode String?
+  parent     AtcCode?  @relation("AtcHierarchy", fields: [parentCode], references: [code])
+  children   AtcCode[] @relation("AtcHierarchy")
+  /// WHO Defined Daily Dose, only for level-5 codes where WHO publishes one.
+  ddd        Decimal?
+  dddUnit    String?
+  dddRoute   String?
+  /// Code-set release this row came from, e.g. "WHO-ATC-2026".
+  release    String
+  updatedAt  DateTime  @updatedAt
+  drugs      Drug[]
+
+  @@index([parentCode])
+}
+
+/// Kenya Pharmacy and Poisons Board Health Products and Technologies code list.
+model HptCode {
+  code        String   @id
+  description String
+  category    String?
+  /// Registration status as published by PPB (e.g. REGISTERED, RETAINED, WITHDRAWN).
+  ppbStatus   String?
+  release     String
+  updatedAt   DateTime @updatedAt
+  drug        Drug?
+}
+
+/// One row per bulk import of a code set, for traceability.
+model CodeSetImport {
+  id          String     @id @default(uuid())
+  codeSystem  CodeSystem
+  release     String
+  rowsTotal   Int
+  rowsCreated Int
+  rowsUpdated Int
+  rowsFailed  Int
+  importedBy  String
+  importedAt  DateTime   @default(now())
+  errors      Json?
+}
+
+enum CodeSystem {
+  WHO_ATC
+  PPB_HPT
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Drug master and formulary
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Drug {
+  id                  String                        @id @default(uuid())
+  /// PPB HPT code. Primary identifier in all integrations.
+  hptCode             String                        @unique
+  hpt                 HptCode                       @relation(fields: [hptCode], references: [code])
+  /// Level-5 WHO ATC code.
+  atcCode             String
+  atc                 AtcCode                       @relation(fields: [atcCode], references: [code])
+  genericName         String
+  brandNames          String[]
+  strength            String // display form, e.g. "500 mg"
+  strengthValue       Decimal?
+  strengthUnit        String?
+  dosageForm          String // e.g. TABLET, CAPSULE, SYRUP, INJECTION
+  route               String // e.g. ORAL, IV, IM, TOPICAL
+  packSize            Int
+  unitOfIssue         String // e.g. TABLET, BOTTLE, VIAL
+  controlledSchedule  ControlledSchedule            @default(NONE)
+  formularyStatus     FormularyStatus               @default(ACTIVE)
+  pregnancyRisk       ReproductiveRisk              @default(UNKNOWN)
+  lactationRisk       ReproductiveRisk              @default(UNKNOWN)
+  substitutionGroupId String?
+  substitutionGroup   SubstitutionGroup?            @relation(fields: [substitutionGroupId], references: [id])
+  version             Int                           @default(1)
+  createdAt           DateTime                      @default(now())
+  updatedAt           DateTime                      @updatedAt
+  versions            DrugVersion[]
+  prices              DrugPrice[]
+  facilityEntries     FacilityFormulary[]
+  doseLimitRules      DoseLimitRule[]
+  prescriptionItems   PrescriptionItem[]
+  dispenseLines       DispenseLine[]                @relation("DispensedDrug")
+  substitutedLines    DispenseLine[]                @relation("SubstitutedFromDrug")
+  adverseReactions    AdverseDrugReaction[]
+  allergies           Allergy[]
+  controlledEntries   ControlledDrugRegisterEntry[]
+
+  @@index([atcCode])
+  @@index([genericName])
+}
+
+enum FormularyStatus {
+  ACTIVE
+  RESTRICTED
+  NON_FORMULARY
+  DISCONTINUED
+}
+
+enum ControlledSchedule {
+  NONE
+  SCHEDULE_1
+  SCHEDULE_2
+  SCHEDULE_3
+  SCHEDULE_4
+  SCHEDULE_5
+}
+
+enum ReproductiveRisk {
+  UNKNOWN
+  SAFE
+  CAUTION
+  AVOID
+  CONTRAINDICATED
+}
+
+/// Immutable snapshot written on every drug change (versioning + audit).
+model DrugVersion {
+  id        String   @id @default(uuid())
+  drugId    String
+  drug      Drug     @relation(fields: [drugId], references: [id])
+  version   Int
+  snapshot  Json
+  changedBy String
+  reason    String?
+  changedAt DateTime @default(now())
+
+  @@unique([drugId, version])
+}
+
+/// Drugs that may be substituted for each other (same molecule, strength, form).
+model SubstitutionGroup {
+  id          String  @id @default(uuid())
+  name        String
+  description String?
+  drugs       Drug[]
+}
+
+/// Facility-level formulary: which drugs a facility stocks and under what rules.
+model FacilityFormulary {
+  id                 String          @id @default(uuid())
+  facilityId         String
+  drugId             String
+  drug               Drug            @relation(fields: [drugId], references: [id])
+  status             FormularyStatus
+  /// For RESTRICTED drugs: the role or specialty that must approve, e.g. "CONSULTANT_ID".
+  approvalRequiredBy String?
+  restrictionNote    String?
+  updatedAt          DateTime        @updatedAt
+
+  @@unique([facilityId, drugId])
+}
+
+/// Price list per drug. Pushed to CliniTrack, which owns pricing rules and invoicing.
+model DrugPrice {
+  id                   String    @id @default(uuid())
+  drugId               String
+  drug                 Drug      @relation(fields: [drugId], references: [id])
+  priceListCode        String // e.g. "DEFAULT", "SHA", facility-specific list
+  unitPrice            Decimal
+  currency             String    @default("KES")
+  effectiveFrom        DateTime
+  effectiveTo          DateTime?
+  syncedToClinitrackAt DateTime?
+
+  @@index([drugId, priceListCode, effectiveFrom])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Medication-safety rules (knowledge base)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Drug-drug interaction. Matches on ATC prefixes so a rule can target a whole
+/// class (e.g. "J01MA" fluoroquinolones) or a single drug (level-5 code).
+model DrugInteraction {
+  id          String              @id @default(uuid())
+  atcPrefixA  String
+  atcPrefixB  String
+  severity    InteractionSeverity
+  description String
+  management  String?
+  source      String?
+
+  @@index([atcPrefixA])
+  @@index([atcPrefixB])
+}
+
+enum InteractionSeverity {
+  MINOR
+  MODERATE
+  MAJOR
+  CONTRAINDICATED
+}
+
+/// Drug-disease contraindication, linked to an ATC prefix and an ICD code prefix.
+model Contraindication {
+  id              String          @id @default(uuid())
+  atcPrefix       String
+  diagnosisSystem DiagnosisSystem
+  diagnosisPrefix String
+  severity        AlertSeverity
+  rationale       String
+
+  @@index([atcPrefix])
+}
+
+enum DiagnosisSystem {
+  ICD10
+  ICD11
+}
+
+/// Dose limits by drug or ATC class, optionally scoped by age, weight, renal or hepatic function.
+model DoseLimitRule {
+  id                String        @id @default(uuid())
+  drugId            String?
+  drug              Drug?         @relation(fields: [drugId], references: [id])
+  atcPrefix         String?
+  route             String?
+  minAgeMonths      Int?
+  maxAgeMonths      Int?
+  minWeightKg       Decimal?
+  maxWeightKg       Decimal?
+  /// Applies only when creatinine clearance (mL/min) is below this value.
+  crClBelow         Decimal?
+  /// Applies only when the patient has hepatic impairment.
+  hepaticImpairment Boolean?
+  doseUnit          String
+  perKg             Boolean       @default(false)
+  maxSingleDose     Decimal?
+  maxDailyDose      Decimal?
+  severity          AlertSeverity @default(WARNING)
+  note              String?
+}
+
+enum AlertSeverity {
+  INFO
+  WARNING
+  HARD_STOP
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Patient medication-safety records (patientId = CliniTrack patient id)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Allergy {
+  id                 String             @id @default(uuid())
+  patientId          String
+  agentType          AllergyAgentType
+  /// For DRUG agents.
+  drugId             String?
+  drug               Drug?              @relation(fields: [drugId], references: [id])
+  /// For DRUG_CLASS agents (or to widen a DRUG allergy), an ATC prefix such as "J01C".
+  atcPrefix          String?
+  agentText          String
+  reaction           String?
+  severity           AllergySeverity
+  verificationStatus VerificationStatus @default(UNCONFIRMED)
+  status             RecordStatus       @default(ACTIVE)
+  source             SourceSystem       @default(PHARMTRACK)
+  externalId         String?            @unique
+  recordedBy         String
+  recordedAt         DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  @@index([patientId])
+}
+
+enum AllergyAgentType {
+  DRUG
+  DRUG_CLASS
+  NON_DRUG
+}
+
+enum AllergySeverity {
+  MILD
+  MODERATE
+  SEVERE
+  LIFE_THREATENING
+}
+
+enum VerificationStatus {
+  UNCONFIRMED
+  CONFIRMED
+  REFUTED
+}
+
+enum RecordStatus {
+  ACTIVE
+  INACTIVE
+  ENTERED_IN_ERROR
+}
+
+enum SourceSystem {
+  PHARMTRACK
+  CLINITRACK
+}
+
+/// Adverse drug reaction report, exportable in PPB pharmacovigilance format.
+model AdverseDrugReaction {
+  id              String          @id @default(uuid())
+  patientId       String
+  encounterId     String?
+  drugId          String
+  drug            Drug            @relation(fields: [drugId], references: [id])
+  dispenseLineId  String?
+  onsetDate       DateTime
+  description     String
+  seriousness     AdrSeriousness
+  /// WHO-UMC causality category.
+  causality       AdrCausality    @default(UNASSESSED)
+  actionTaken     String?
+  outcome         AdrOutcome      @default(UNKNOWN)
+  reportedBy      String
+  reportedAt      DateTime        @default(now())
+  ppbReportStatus PpbReportStatus @default(NOT_SUBMITTED)
+  ppbReference    String?
+
+  @@index([patientId])
+  @@index([drugId])
+}
+
+enum AdrSeriousness {
+  NON_SERIOUS
+  SERIOUS_HOSPITALISATION
+  SERIOUS_LIFE_THREATENING
+  SERIOUS_DISABILITY
+  SERIOUS_CONGENITAL_ANOMALY
+  SERIOUS_DEATH
+}
+
+enum AdrCausality {
+  UNASSESSED
+  CERTAIN
+  PROBABLE
+  POSSIBLE
+  UNLIKELY
+  CONDITIONAL
+  UNASSESSABLE
+}
+
+enum AdrOutcome {
+  UNKNOWN
+  RECOVERED
+  RECOVERING
+  NOT_RECOVERED
+  RECOVERED_WITH_SEQUELAE
+  FATAL
+}
+
+enum PpbReportStatus {
+  NOT_SUBMITTED
+  EXPORTED
+  SUBMITTED
+  ACKNOWLEDGED
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Prescribing (pad lives in CliniTrack; signed prescriptions land here)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Prescription {
+  id              String             @id @default(uuid())
+  /// CliniTrack's prescription id. Unique so re-delivery is idempotent.
+  externalId      String             @unique
+  patientId       String
+  encounterId     String
+  prescriberId    String
+  facilityId      String
+  storeId         String
+  status          PrescriptionStatus @default(SIGNED)
+  signedAt        DateTime
+  receivedAt      DateTime           @default(now())
+  /// Patient context sent with the prescription and used for safety checks.
+  clinicalContext Json?
+  items           PrescriptionItem[]
+  dispenseOrders  DispenseOrder[]
+
+  @@index([patientId])
+  @@index([facilityId, status])
+}
+
+enum PrescriptionStatus {
+  SIGNED
+  CANCELLED
+  COMPLETED
+}
+
+model PrescriptionItem {
+  id                String          @id @default(uuid())
+  prescriptionId    String
+  prescription      Prescription    @relation(fields: [prescriptionId], references: [id])
+  drugId            String
+  drug              Drug            @relation(fields: [drugId], references: [id])
+  /// Codes captured at signing time so reporting stays stable if the master changes.
+  atcCode           String
+  hptCode           String
+  dose              Decimal
+  doseUnit          String
+  frequency         String // e.g. "TDS", "BD", "Q8H"
+  frequencyPerDay   Decimal
+  route             String
+  durationDays      Int
+  /// Quantity per fill (the initial fill and each refill).
+  quantity          Decimal
+  refillsAuthorised Int             @default(0)
+  instructions      String?
+  quantityDispensed Decimal         @default(0)
+  safetyAlerts      SafetyAlert[]
+  dispenseLines     DispenseLine[]
+  refillSchedule    RefillSchedule?
+}
+
+/// Every alert raised for an item, at prescribing or at pharmacist verification,
+/// with the override (if any). This is the override log.
+model SafetyAlert {
+  id                 String           @id @default(uuid())
+  prescriptionItemId String
+  prescriptionItem   PrescriptionItem @relation(fields: [prescriptionItemId], references: [id])
+  stage              SafetyStage
+  /// Stable key so an override can be matched to its alert, e.g. "ALLERGY:<allergyId>".
+  alertKey           String
+  type               SafetyAlertType
+  severity           AlertSeverity
+  message            String
+  overriddenBy       String?
+  overrideReason     String?
+  raisedAt           DateTime         @default(now())
+
+  @@index([prescriptionItemId])
+}
+
+enum SafetyStage {
+  PRESCRIBING
+  VERIFICATION
+}
+
+enum SafetyAlertType {
+  ALLERGY
+  INTERACTION
+  CONTRAINDICATION
+  DUPLICATE_THERAPY
+  DOSE_LIMIT
+  PREGNANCY
+  LACTATION
+  FORMULARY
+  EARLY_REFILL
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Dispensing (stock via SupplyTrack, billing via CliniTrack)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// One fill of a prescription: the initial fill, or a refill.
+model DispenseOrder {
+  id               String           @id @default(uuid())
+  prescriptionId   String
+  prescription     Prescription     @relation(fields: [prescriptionId], references: [id])
+  kind             DispenseKind     @default(INITIAL)
+  /// 0 for the initial fill, 1..n for refills.
+  fillSequence     Int              @default(0)
+  facilityId       String
+  storeId          String
+  /// Set for REFILL orders: the refill being filled (the order covers that item only).
+  refillScheduleId String?
+  refillSchedule   RefillSchedule?  @relation(fields: [refillScheduleId], references: [id])
+  priority         DispensePriority @default(ROUTINE)
+  status           DispenseStatus   @default(PENDING)
+  verifiedBy       String?
+  verifiedAt       DateTime?
+  cancelReason     String?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  lines            DispenseLine[]
+
+  @@unique([prescriptionId, fillSequence])
+  @@index([storeId, status, priority])
+}
+
+enum DispenseKind {
+  INITIAL
+  REFILL
+}
+
+enum DispensePriority {
+  STAT
+  URGENT
+  ROUTINE
+}
+
+enum DispenseStatus {
+  PENDING
+  IN_VERIFICATION
+  VERIFIED
+  PARTIALLY_DISPENSED
+  DISPENSED
+  CANCELLED
+  RETURNED
+}
+
+model DispenseLine {
+  id                    String                       @id @default(uuid())
+  dispenseOrderId       String
+  dispenseOrder         DispenseOrder                @relation(fields: [dispenseOrderId], references: [id])
+  prescriptionItemId    String
+  prescriptionItem      PrescriptionItem             @relation(fields: [prescriptionItemId], references: [id])
+  drugId                String
+  drug                  Drug                         @relation("DispensedDrug", fields: [drugId], references: [id])
+  substitutedFromDrugId String?
+  substitutedFromDrug   Drug?                        @relation("SubstitutedFromDrug", fields: [substitutedFromDrugId], references: [id])
+  substitutionNote      String?
+  atcCode               String
+  hptCode               String
+  quantity              Decimal
+  quantityReturned      Decimal                      @default(0)
+  batchNumber           String
+  expiryDate            DateTime
+  /// SupplyTrack reservation id; committed (deducted) when the order is completed.
+  supplyReservationId   String
+  unitPrice             Decimal
+  currency              String                       @default("KES")
+  labelText             String?
+  counsellingNotes      String?
+  dispensedBy           String
+  dispensedAt           DateTime                     @default(now())
+  /// CliniTrack billing reference and status. PharmTrack never invoices.
+  billingRef            String?
+  billingStatus         BillingStatus                @default(PENDING)
+  controlledEntry       ControlledDrugRegisterEntry?
+
+  @@index([dispenseOrderId])
+}
+
+enum BillingStatus {
+  PENDING
+  SENT
+  BILLED
+  REVERSED
+  FAILED
+}
+
+/// Controlled-drug register entry with dual sign-off.
+model ControlledDrugRegisterEntry {
+  id             String       @id @default(uuid())
+  dispenseLineId String       @unique
+  dispenseLine   DispenseLine @relation(fields: [dispenseLineId], references: [id])
+  drugId         String
+  drug           Drug         @relation(fields: [drugId], references: [id])
+  patientId      String
+  quantity       Decimal
+  dispensedBy    String
+  witnessedBy    String
+  recordedAt     DateTime     @default(now())
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Refills and patient notifications
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Refill tracking for a prescription item that authorises refills.
+model RefillSchedule {
+  id                 String           @id @default(uuid())
+  prescriptionItemId String           @unique
+  prescriptionItem   PrescriptionItem @relation(fields: [prescriptionItemId], references: [id])
+  patientId          String
+  facilityId         String
+  refillsAuthorised  Int
+  refillsUsed        Int              @default(0)
+  lastDispensedAt    DateTime?
+  /// When the current supply is expected to run out.
+  nextDueDate        DateTime?
+  /// Earliest date a refill may be dispensed without a pharmacist override.
+  earliestRefillDate DateTime?
+  /// Days after nextDueDate before the refill counts as overdue.
+  graceDays          Int              @default(3)
+  /// Refills cannot be dispensed after this date (prescription validity).
+  expiresAt          DateTime
+  status             RefillStatus     @default(UPCOMING)
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+  notifications      Notification[]
+  dispenseOrders     DispenseOrder[]
+
+  @@index([facilityId, status, nextDueDate])
+  @@index([patientId])
+}
+
+enum RefillStatus {
+  UPCOMING
+  DUE
+  OVERDUE
+  COMPLETED
+  CANCELLED
+  EXPIRED
+}
+
+/// SMS contact and consent per patient (mirrored from CliniTrack).
+model PatientContactPreference {
+  patientId         String       @id
+  /// Only the first name is kept, for the SMS greeting (data minimisation).
+  firstName         String?
+  phoneE164         String?
+  smsOptIn          Boolean      @default(false)
+  language          String       @default("en") // "en" | "sw"
+  consentRecordedAt DateTime?
+  source            SourceSystem @default(CLINITRACK)
+  updatedAt         DateTime     @updatedAt
+}
+
+/// Facility details used in patient messages and labels.
+model FacilityProfile {
+  facilityId String   @id
+  name       String
+  phone      String?
+  updatedAt  DateTime @updatedAt
+}
+
+model SmsTemplate {
+  id         String              @id @default(uuid())
+  /// Null = suite-wide default; otherwise facility-specific override.
+  facilityId String?
+  purpose    NotificationPurpose
+  language   String
+  /// Placeholders: {{patientFirstName}} {{drugName}} {{dueDate}} {{facilityName}} {{facilityPhone}}
+  body       String
+  active     Boolean             @default(true)
+  updatedAt  DateTime            @updatedAt
+
+  @@unique([facilityId, purpose, language])
+}
+
+model Notification {
+  id                String              @id @default(uuid())
+  patientId         String
+  refillScheduleId  String?
+  refillSchedule    RefillSchedule?     @relation(fields: [refillScheduleId], references: [id])
+  dispenseOrderId   String?
+  channel           NotificationChannel @default(SMS)
+  purpose           NotificationPurpose
+  toAddress         String?
+  body              String
+  status            NotificationStatus  @default(QUEUED)
+  /// Stops duplicate reminders, e.g. "REFILL_DUE:<scheduleId>:<dueDate>".
+  dedupeKey         String              @unique
+  providerMessageId String?
+  attempts          Int                 @default(0)
+  lastError         String?
+  scheduledFor      DateTime            @default(now())
+  sentAt            DateTime?
+  deliveredAt       DateTime?
+  createdAt         DateTime            @default(now())
+
+  @@index([status, scheduledFor])
+  @@index([patientId])
+}
+
+enum NotificationChannel {
+  SMS
+}
+
+enum NotificationPurpose {
+  REFILL_REMINDER
+  REFILL_DUE
+  REFILL_OVERDUE
+  READY_FOR_COLLECTION
+}
+
+enum NotificationStatus {
+  QUEUED
+  SENT
+  DELIVERED
+  FAILED
+  SKIPPED_NO_CONSENT
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Integration plumbing and audit
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Transactional outbox: events are written in the same transaction as the
+/// state change, then delivered with retries. idempotencyKey is sent downstream.
+model OutboxEvent {
+  id             String       @id @default(uuid())
+  type           String // e.g. "dispense.completed"
+  destination    String // CLINITRACK | SUPPLYTRACK
+  idempotencyKey String       @unique
+  payload        Json
+  status         OutboxStatus @default(PENDING)
+  attempts       Int          @default(0)
+  lastError      String?
+  nextAttemptAt  DateTime     @default(now())
+  createdAt      DateTime     @default(now())
+  deliveredAt    DateTime?
+
+  @@index([status, nextAttemptAt])
+}
+
+enum OutboxStatus {
+  PENDING
+  DELIVERED
+  DEAD
+}
+
+/// Inbound dedupe: every message received from CliniTrack/SupplyTrack is recorded
+/// by its idempotency key so redelivery has no effect.
+model InboxMessage {
+  idempotencyKey String   @id
+  source         String
+  type           String
+  receivedAt     DateTime @default(now())
+  resultRef      String?
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  actorId    String
+  actorRole  String
+  action     String // e.g. "drug.update", "dispense.complete", "safety.override"
+  entityType String
+  entityId   String
+  before     Json?
+  after      Json?
+  at         DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([actorId])
+}
