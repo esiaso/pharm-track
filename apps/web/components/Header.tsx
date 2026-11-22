@@ -1,42 +1,197 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { ReactNode, useState } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
+import { ReactNode, useEffect, useRef, useState } from 'react';
 import { hasRole, ROLES, useSession } from '../lib/session';
+import { THEME_KEY } from '../lib/theme';
+import { Icon, IconName } from './icons';
 
-const NAV = [
-  { href: '/dispensing', label: 'Dispensing' },
-  { href: '/refills', label: 'Refills' },
-  { href: '/patients', label: 'Patients' },
-  { href: '/formulary', label: 'Formulary' },
-  { href: '/reports', label: 'Reports', roles: ['PHARMACIST'] },
-  { href: '/content', label: 'Clinical content', roles: ['PHARMACIST'] },
-  { href: '/integrations', label: 'Integrations', roles: ['PHARMACIST'] },
-  { href: '/privacy', label: 'Data protection', roles: ['ADMINISTRATOR'] },
+type NavItem = { href: string; label: string; icon: IconName; roles?: string[]; hint: string };
+
+const GROUPS: { title: string; items: NavItem[] }[] = [
+  {
+    title: 'Pharmacy',
+    items: [
+      { href: '/', label: 'Overview', icon: 'home', hint: 'Start page' },
+      { href: '/dispensing', label: 'Dispensing', icon: 'pill', hint: 'Queue, verification, labels, returns' },
+      { href: '/refills', label: 'Refills', icon: 'refresh', hint: 'Due and overdue refills, SMS' },
+      { href: '/patients', label: 'Patients', icon: 'users', hint: 'Allergies, history, ADRs' },
+      { href: '/formulary', label: 'Formulary', icon: 'book', hint: 'Drugs, codes, prices' },
+    ],
+  },
+  {
+    title: 'Management',
+    items: [
+      { href: '/reports', label: 'Reports', icon: 'chart', roles: ['PHARMACIST'], hint: 'Registers, returns, stock' },
+      { href: '/content', label: 'Clinical content', icon: 'shield', roles: ['PHARMACIST'], hint: 'Code lists and rule sets' },
+      { href: '/integrations', label: 'Integrations', icon: 'plug', roles: ['PHARMACIST'], hint: 'CliniTrack and SupplyTrack outbox' },
+      { href: '/privacy', label: 'Data protection', icon: 'lock', roles: ['ADMINISTRATOR'], hint: 'Access log, export, retention' },
+    ],
+  },
 ];
 
-export function Header() {
+const ALL = GROUPS.flatMap((g) => g.items);
+const isActive = (path: string | null, href: string) => (href === '/' ? path === '/' : !!path?.startsWith(href));
+const roleLabel = (r: string) => r.toLowerCase().replace(/_/g, ' ');
+
+/** Sidebar, top bar and page area. */
+export function AppShell({ children }: { children: ReactNode }) {
   const path = usePathname();
-  const { session, setSession, status, signOut } = useSession();
-  const [open, setOpen] = useState(false);
+  const { session, status } = useSession();
+  const [navOpen, setNavOpen] = useState(false);
+  useEffect(() => setNavOpen(false), [path]);
+  const ready = status === 'ready';
+  const visible = (n: NavItem) => !n.roles || hasRole(session, ...n.roles);
+  const current = ALL.find((n) => n.href !== '/' && isActive(path, n.href));
+
   return (
-    <header className="top">
-      <Link href="/" className="brand">PharmTrack</Link>
-      {status === 'ready' && (
-        <nav>
-          {NAV.filter((n) => !n.roles || hasRole(session, ...n.roles)).map((n) => (
-            <Link key={n.href} href={n.href} className={path?.startsWith(n.href) ? 'active' : ''}>
-              {n.label}
-            </Link>
-          ))}
-        </nav>
+    <div className="shell">
+      <aside className={`sidebar no-print${navOpen ? ' open' : ''}`} aria-label="Main menu">
+        <div className="sidebar-head">
+          <Link href="/" className="brand">
+            <span className="brand-mark"><Icon name="pill" size={18} /></span>
+            PharmTrack
+          </Link>
+          <button className="icon-btn sidebar-close" onClick={() => setNavOpen(false)} aria-label="Close menu"><Icon name="close" /></button>
+        </div>
+        {ready && (
+          <nav>
+            {GROUPS.map((g) => {
+              const items = g.items.filter(visible);
+              if (!items.length) return null;
+              return (
+                <div key={g.title} className="nav-group">
+                  <p className="nav-title">{g.title}</p>
+                  {items.map((n) => (
+                    <Link key={n.href} href={n.href} className={`nav-link${isActive(path, n.href) ? ' active' : ''}`} aria-current={isActive(path, n.href) ? 'page' : undefined}>
+                      <Icon name={n.icon} />
+                      <span>{n.label}</span>
+                    </Link>
+                  ))}
+                </div>
+              );
+            })}
+          </nav>
+        )}
+        <p className="sidebar-foot small muted">SynergyOne pharmacy module</p>
+      </aside>
+      {navOpen && <div className="scrim no-print" onClick={() => setNavOpen(false)} />}
+
+      <div className="shell-main">
+        <header className="topbar no-print">
+          <button className="icon-btn menu-btn" onClick={() => setNavOpen(true)} aria-label="Open menu"><Icon name="menu" /></button>
+          <div className="crumb">
+            <strong>{current?.label ?? (path === '/' ? 'Overview' : 'PharmTrack')}</strong>
+            <span className="small muted">PharmTrack{current ? ` / ${current.label}` : ''}</span>
+          </div>
+          {ready && <PageSearch items={ALL.filter(visible)} />}
+          <ThemeToggle />
+          {ready && <UserMenu />}
+        </header>
+        <main>{children}</main>
+      </div>
+    </div>
+  );
+}
+
+/** Jumps to a screen. Ctrl+K or Cmd+K focuses it. */
+function PageSearch({ items }: { items: NavItem[] }) {
+  const router = useRouter();
+  const [q, setQ] = useState('');
+  const [focus, setFocus] = useState(false);
+  const [sel, setSel] = useState(0);
+  const ref = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        ref.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+  const term = q.trim().toLowerCase();
+  const hits = term ? items.filter((n) => `${n.label} ${n.hint}`.toLowerCase().includes(term)) : items;
+  const go = (n: NavItem) => {
+    setQ('');
+    ref.current?.blur();
+    router.push(n.href);
+  };
+  return (
+    <div className="search">
+      <Icon name="search" size={18} />
+      <input
+        ref={ref}
+        value={q}
+        placeholder="Search screens"
+        aria-label="Search screens"
+        onChange={(e) => { setQ(e.target.value); setSel(0); }}
+        onFocus={() => setFocus(true)}
+        onBlur={() => setTimeout(() => setFocus(false), 150)}
+        onKeyDown={(e) => {
+          if (e.key === 'ArrowDown') { e.preventDefault(); setSel((s) => Math.min(s + 1, hits.length - 1)); }
+          if (e.key === 'ArrowUp') { e.preventDefault(); setSel((s) => Math.max(s - 1, 0)); }
+          if (e.key === 'Enter' && hits[sel]) go(hits[sel]);
+          if (e.key === 'Escape') ref.current?.blur();
+        }}
+      />
+      <kbd>⌘K</kbd>
+      {focus && (
+        <ul className="search-results card" role="listbox">
+          {hits.length ? hits.map((n, i) => (
+            <li key={n.href} role="option" aria-selected={i === sel} onMouseDown={() => go(n)}>
+              <Icon name={n.icon} size={18} />
+              <span><strong>{n.label}</strong><span className="small muted">{n.hint}</span></span>
+            </li>
+          )) : <li className="muted">No matching screen</li>}
+        </ul>
       )}
-      {status === 'ready' && (
-        <button className="session" onClick={() => setOpen(!open)} aria-expanded={open}>
-          {session.userId} · {session.role.toLowerCase().replace(/_/g, ' ')} · {session.storeId}
-        </button>
-      )}
+    </div>
+  );
+}
+
+function ThemeToggle() {
+  const [dark, setDark] = useState<boolean | null>(null);
+  useEffect(() => {
+    const t = document.documentElement.dataset.theme;
+    setDark(t ? t === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches);
+  }, []);
+  const toggle = () => {
+    const next = dark ? 'light' : 'dark';
+    document.documentElement.dataset.theme = next;
+    try { localStorage.setItem(THEME_KEY, next); } catch { /* storage unavailable */ }
+    setDark(!dark);
+  };
+  return (
+    <button className="icon-btn" onClick={toggle} aria-label={dark ? 'Use light theme' : 'Use dark theme'} title={dark ? 'Light theme' : 'Dark theme'}>
+      <Icon name={dark ? 'sun' : 'moon'} />
+    </button>
+  );
+}
+
+function UserMenu() {
+  const { session, setSession, signOut } = useSession();
+  const [open, setOpen] = useState(false);
+  const wrap = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => { if (!wrap.current?.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [open]);
+  const initials = session.userId.replace(/[^A-Za-z0-9]/g, ' ').trim().split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase() || '?';
+  return (
+    <div className="user" ref={wrap}>
+      <button className="user-btn" onClick={() => setOpen(!open)} aria-expanded={open}>
+        <span className="avatar">{initials}</span>
+        <span className="user-text">
+          <strong>{session.userId}</strong>
+          <span className="small muted">{roleLabel(session.role)} · {session.storeId}</span>
+        </span>
+        <Icon name="chevron" size={16} />
+      </button>
       {open && (
         <form
           className="session-panel card"
@@ -54,7 +209,7 @@ export function Header() {
           }}
         >
           {session.sso ? (
-            <p className="small">Signed in through SynergyOne as <strong>{session.userId}</strong> ({session.roles.map((r) => r.toLowerCase().replace(/_/g, ' ')).join(', ') || 'no PharmTrack role'}).</p>
+            <p className="small">Signed in through SynergyOne as <strong>{session.userId}</strong> ({session.roles.map(roleLabel).join(', ') || 'no PharmTrack role'}).</p>
           ) : (
             <>
               <p className="muted small">Development sign-in. Set the NEXT_PUBLIC_SSO_* settings to use SynergyOne SSO.</p>
@@ -62,7 +217,7 @@ export function Header() {
               <label>
                 Role
                 <select name="role" defaultValue={session.role}>
-                  {ROLES.map((r) => <option key={r} value={r}>{r.toLowerCase().replace(/_/g, ' ')}</option>)}
+                  {ROLES.map((r) => <option key={r} value={r}>{roleLabel(r)}</option>)}
                 </select>
               </label>
             </>
@@ -75,7 +230,7 @@ export function Header() {
           </div>
         </form>
       )}
-    </header>
+    </div>
   );
 }
 
