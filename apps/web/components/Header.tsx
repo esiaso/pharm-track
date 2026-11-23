@@ -6,7 +6,7 @@ import { ComponentType, ReactNode, SVGProps, useEffect, useRef, useState } from 
 import { hasRole, ROLES, useSession } from '../lib/session';
 import {
   IconBook, IconChart, IconChevronDown, IconClose, IconFlask, IconHome, IconMenu, IconMoon, IconPanel, IconPill,
-  IconPlug, IconRepeat, IconSearch, IconShield, IconSun, IconUsers, Logo,
+  IconPlug, IconRepeat, IconSearch, IconSettings, IconShield, IconSun, IconUsers, Logo,
 } from './Icons';
 
 type NavItem = { href: string; label: string; icon: ComponentType<SVGProps<SVGSVGElement>>; roles?: string[] };
@@ -29,6 +29,7 @@ const NAV: { title: string; items: NavItem[] }[] = [
       { href: '/content', label: 'Clinical content', icon: IconFlask, roles: ['PHARMACIST'] },
       { href: '/integrations', label: 'Integrations', icon: IconPlug, roles: ['PHARMACIST'] },
       { href: '/privacy', label: 'Data protection', icon: IconShield, roles: ['ADMINISTRATOR'] },
+      { href: '/settings', label: 'Settings', icon: IconSettings, roles: ['ADMINISTRATOR', 'PHARMACIST'] },
     ],
   },
 ];

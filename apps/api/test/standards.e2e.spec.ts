@@ -293,4 +293,37 @@ run('FHIR facade and data protection end-to-end', () => {
 
     await api().post(`/api/v1/dispensing/orders/${orderId}/labels/print`).set(PHARMACIST).send({ copies: 50 }).expect(400);
   });
+  it('lets an administrator set the facility profile and SMS wording, including wording without the medicine name', async () => {
+    const base = '/api/v1/facilities/FAC-SET';
+    await api().put(`${base}/profile`).set(PHARMACIST).send({ name: 'Nope' }).expect(403);
+    await api().put(`${base}/profile`).set(ADMIN).send({ name: 'Riverside Clinic', phone: ' 0711 000 111 ' }).expect(200);
+    expect((await api().get(`${base}/profile`).set(PHARMACIST).expect(200)).body).toMatchObject({ name: 'Riverside Clinic', phone: '0711 000 111' });
+
+    const before = (await api().get(`${base}/sms-templates`).set(ADMIN).expect(200)).body;
+    expect(before.templates).toHaveLength(8);
+    const reminder = before.templates.find((t: any) => t.purpose === 'REFILL_REMINDER' && t.language === 'en');
+    expect(reminder).toMatchObject({ source: 'default', namesMedicine: true });
+
+    const bad = await api().put('/api/v1/sms-templates').set(ADMIN).send({ facilityId: 'FAC-SET', purpose: 'REFILL_REMINDER', language: 'en', body: 'Hello {{name}}, come in soon please.' }).expect(400);
+    expect(bad.body.message).toMatch(/\{\{name\}\}/);
+
+    await api().put('/api/v1/sms-templates').set(ADMIN).send({ facilityId: 'FAC-SET', purpose: 'REFILL_REMINDER', language: 'en', body: reminder.privateBody }).expect(200);
+    const after = (await api().get(`${base}/sms-templates`).set(ADMIN).expect(200)).body.templates.find((t: any) => t.purpose === 'REFILL_REMINDER' && t.language === 'en');
+    expect(after).toMatchObject({ source: 'facility', namesMedicine: false });
+
+    // A queued reminder uses the facility's wording and profile, and does not name the medicine.
+    await prisma.patientContactPreference.upsert({
+      where: { patientId: 'PAT-SET' },
+      create: { patientId: 'PAT-SET', firstName: 'Amina', phoneE164: '+254711000111', smsOptIn: true, language: 'en' },
+      update: {},
+    });
+    const n = await app.get(NotificationsService).queue({ patientId: 'PAT-SET', facilityId: 'FAC-SET', purpose: 'REFILL_REMINDER', dedupeKey: 'set-1', vars: { drugName: 'Tenofovir', dueDate: '1 Dec 2026' } });
+    expect(n.body).toContain('Riverside Clinic');
+    expect(n.body).not.toContain('Tenofovir');
+
+    await api().delete(`${base}/sms-templates/REFILL_REMINDER/en`).set(ADMIN).expect(200);
+    await api().delete(`${base}/sms-templates/NOPE/en`).set(ADMIN).expect(400);
+    expect((await api().get(`${base}/sms-templates`).set(ADMIN).expect(200)).body.templates.find((t: any) => t.purpose === 'REFILL_REMINDER' && t.language === 'en').source).toBe('default');
+    expect(await prisma.auditLog.count({ where: { action: { in: ['facility-profile.update', 'sms-template.update', 'sms-template.reset'] }, actorId: 'u-dpo' } })).toBe(3);
+  });
 });

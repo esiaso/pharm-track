@@ -1,6 +1,6 @@
-import { Body, Controller, Get, HttpCode, Param, Post, Put, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, ParseEnumPipe, Post, Put, Query } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import { RefillStatus } from '@prisma/client';
+import { NotificationPurpose, RefillStatus } from '@prisma/client';
 import { Actor, CurrentActor, Role, Roles } from '../common/auth';
 import { PatientData } from '../common/patient-access';
 import { NotificationsService } from './notifications.service';
@@ -73,16 +73,41 @@ export class RefillsController {
     return this.notifications.setContactPreference(patientId, dto, actor);
   }
 
+  @Get('facilities/:facilityId/profile')
+  @Roles(Role.ADMINISTRATOR, ...PHARMACY)
+  facilityProfile(@Param('facilityId') facilityId: string) {
+    return this.notifications.getFacilityProfile(facilityId);
+  }
+
   @Put('facilities/:facilityId/profile')
   @Roles(Role.ADMINISTRATOR)
-  facility(@Param('facilityId') facilityId: string, @Body() dto: FacilityProfileDto) {
-    return this.notifications.setFacilityProfile(facilityId, dto);
+  facility(@Param('facilityId') facilityId: string, @Body() dto: FacilityProfileDto, @CurrentActor() actor: Actor) {
+    return this.notifications.setFacilityProfile(facilityId, dto, actor);
+  }
+
+  /** The SMS wording in force at a facility, per message and language. */
+  @Get('facilities/:facilityId/sms-templates')
+  @Roles(Role.ADMINISTRATOR, ...PHARMACY)
+  facilityTemplates(@Param('facilityId') facilityId: string) {
+    return this.notifications.effectiveTemplates(facilityId);
+  }
+
+  /** Goes back to the suite-wide or built-in wording for one message and language. */
+  @Delete('facilities/:facilityId/sms-templates/:purpose/:language')
+  @Roles(Role.ADMINISTRATOR)
+  resetTemplate(
+    @Param('facilityId') facilityId: string,
+    @Param('purpose', new ParseEnumPipe(NotificationPurpose)) purpose: NotificationPurpose,
+    @Param('language', new ParseEnumPipe(['en', 'sw'])) language: string,
+    @CurrentActor() actor: Actor,
+  ) {
+    return this.notifications.resetTemplate(facilityId, purpose, language, actor);
   }
 
   @Put('sms-templates')
   @Roles(Role.ADMINISTRATOR)
-  template(@Body() dto: SmsTemplateDto) {
-    return this.notifications.upsertTemplate(dto);
+  template(@Body() dto: SmsTemplateDto, @CurrentActor() actor: Actor) {
+    return this.notifications.upsertTemplate(dto, actor);
   }
 
   /** Delivery-report webhook for the SMS gateway. */

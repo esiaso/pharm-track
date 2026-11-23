@@ -1,5 +1,5 @@
 import { daysOfSupply, isEarlyRefill, proportionOfDaysCovered, refillStatus, reminderToSend, scheduleAfterFill } from './refills';
-import { normaliseKenyanMobile, renderTemplate } from './sms';
+import { DEFAULT_TEMPLATES, normaliseKenyanMobile, PRIVATE_TEMPLATES, renderTemplate, unknownPlaceholders } from './sms';
 
 const d = (s: string) => new Date(`${s}T00:00:00Z`);
 
@@ -61,6 +61,20 @@ describe('refill schedule', () => {
 describe('sms helpers', () => {
   it('renders templates', () => {
     expect(renderTemplate('Hi {{ name }}, {{x}}', { name: 'Amina' })).toBe('Hi Amina, ');
+  });
+  it('finds placeholders that are not supported', () => {
+    expect(unknownPlaceholders('Hi {{patientFirstName}}, {{ drugname }} at {{facilityName}} {{x}} {{x}}')).toEqual(['drugname', 'x']);
+    expect(unknownPlaceholders(DEFAULT_TEMPLATES.REFILL_REMINDER.en)).toEqual([]);
+  });
+  it('has wording without the medicine name for every message and language', () => {
+    for (const [purpose, langs] of Object.entries(DEFAULT_TEMPLATES)) {
+      for (const lang of Object.keys(langs)) {
+        const body = PRIVATE_TEMPLATES[purpose][lang];
+        expect(body).toBeTruthy();
+        expect(body).not.toMatch(/drugName/);
+        expect(unknownPlaceholders(body)).toEqual([]);
+      }
+    }
   });
   it('normalises Kenyan mobiles', () => {
     expect(normaliseKenyanMobile('0712 345 678')).toBe('+254712345678');

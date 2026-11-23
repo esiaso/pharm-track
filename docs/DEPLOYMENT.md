@@ -88,7 +88,8 @@ Label size defaults to 76 x 51 mm (3 x 2 in) at 203 dpi. Change it with
 `LABEL_WIDTH_MM` (50 to 120), `LABEL_HEIGHT_MM` (45 to 200) and `LABEL_DPI`
 (203, 300 or 600). Each label has:
 
-- the facility name and phone, from the facility profile;
+- the facility name and phone, from the facility profile (set on the
+  **Settings** screen by an administrator);
 - the patient name (if typed on the screen) or the patient id;
 - the medicine, strength, form and quantity;
 - the directions and any counselling notes;
@@ -107,4 +108,5 @@ Text is sent as UTF-8, so Swahili and accented names print correctly.
 - Register the facility (and the hosting and SMS processors) with the ODPC.
   See [DATA-PROTECTION.md](DATA-PROTECTION.md).
 - Load the official code lists and rule sets. See [CLINICAL-CONTENT.md](CLINICAL-CONTENT.md).
+- Set each facility's name, phone and SMS wording on the **Settings** screen.
 - Print a test label on each store's printer and check it against the label size.
