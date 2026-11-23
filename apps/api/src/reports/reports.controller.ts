@@ -1,10 +1,10 @@
-import { Body, Controller, Delete, Get, Param, Post, Query, Res } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Query, Req, Res } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 import { Actor, CurrentActor, Role, Roles } from '../common/auth';
 import { PatientData } from '../common/patient-access';
-import { AdrBatchDto, GenerateReportDto, ListRunsQuery, PeriodQuery, StockOutQuery, SubmitReportDto } from './reports.dto';
-import { consumptionCsv, prescribingCsv, ReportsService, stockOutCsv } from './reports.service';
+import { AdrBatchDto, ControlledRegisterQuery, GenerateReportDto, ListRunsQuery, PeriodQuery, StockOutQuery, SubmitReportDto } from './reports.dto';
+import { consumptionCsv, controlledRegisterCsv, prescribingCsv, ReportsService, stockOutCsv } from './reports.service';
 
 function period(from?: string, to?: string) {
   const end = to ? new Date(to) : new Date();
@@ -55,6 +55,16 @@ export class ReportsController {
   @Get('stock-outs')
   async stockOuts(@Query() q: StockOutQuery, @Res({ passthrough: true }) res: Response) {
     return maybeCsv(res, q.format, 'stock-outs.csv', await this.service.stockOuts({ facilityId: q.facilityId, storeId: q.storeId, ...period(q.from, q.to) }), stockOutCsv);
+  }
+
+  /** Controlled-drug register with dual sign-off. Names patients, so access is logged. */
+  @Get('controlled-drugs')
+  @PatientData('reports.controlled-drugs')
+  async controlledDrugs(@Query() q: ControlledRegisterQuery, @Req() req: Request & { patientAccess?: string[] }, @Res({ passthrough: true }) res: Response) {
+    const r = await this.service.controlledRegister({ facilityId: q.facilityId, storeId: q.storeId, drugId: q.drugId, ...period(q.from, q.to) });
+    // The CSV is not JSON, so name its patients for the access log.
+    req.patientAccess = r.entries.map((e) => e.patientId);
+    return maybeCsv(res, q.format, 'controlled-drug-register.csv', r, (b) => controlledRegisterCsv(b.entries));
   }
 
   // ADR reporting to PPB

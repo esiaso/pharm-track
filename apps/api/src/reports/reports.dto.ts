@@ -14,6 +14,10 @@ export class StockOutQuery extends PeriodQuery {
   @IsOptional() @IsString() storeId?: string;
 }
 
+export class ControlledRegisterQuery extends StockOutQuery {
+  @IsOptional() @IsString() drugId?: string;
+}
+
 export class GenerateReportDto {
   @IsIn(['PHARMACY_RETURN', 'STOCK_OUT']) kind: 'PHARMACY_RETURN' | 'STOCK_OUT';
   @IsString() facilityId: string;

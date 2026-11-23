@@ -286,6 +286,21 @@ run('PharmTrack end-to-end', () => {
       .send({ lines: [{ prescriptionItemId: itemId, quantity: 12, witnessedBy: 'u-pharm-2' }] })
       .expect(200);
     expect(ok.body.lines[0].controlledEntry).toMatchObject({ dispensedBy: 'u-pharm-1', witnessedBy: 'u-pharm-2' });
+
+    // The entry shows in the controlled-drug register, and reading it is logged against the patient.
+    const reg = await api().get('/api/v1/reports/controlled-drugs').query({ facilityId: 'FAC-1' }).set(PHARMACIST).expect(200);
+    const entry = reg.body.entries.find((e: { patientId: string }) => e.patientId === 'PAT-4');
+    expect(entry).toMatchObject({ hptCode: 'SAMPLE-HPT-0006', quantity: 12, quantityReturned: 0, dispensedBy: 'u-pharm-1', witnessedBy: 'u-pharm-2', storeId: expect.any(String) });
+    expect(reg.body.totals.find((t: { hptCode: string }) => t.hptCode === 'SAMPLE-HPT-0006')).toMatchObject({ issued: 12, net: 12 });
+    await api().get('/api/v1/reports/controlled-drugs').query({ facilityId: 'FAC-OTHER' }).set(PHARMACIST).expect(200)
+      .then((r) => expect(r.body.entries).toHaveLength(0));
+    const csv = await api().get('/api/v1/reports/controlled-drugs').query({ facilityId: 'FAC-1', format: 'csv' }).set(PHARMACIST).expect(200);
+    expect(csv.headers['content-type']).toMatch(/text\/csv/);
+    expect(csv.text.split('\n')[0]).toContain('witnessed_by');
+    expect(csv.text).toContain('u-pharm-2');
+    const logs = await prisma.patientAccessLog.findMany({ where: { patientId: 'PAT-4', action: 'reports.controlled-drugs' } });
+    expect(logs.length).toBeGreaterThanOrEqual(2);
+    await api().get('/api/v1/reports/controlled-drugs').set(H('PHARMACY_TECHNICIAN', 'u-tech')).expect(403);
   });
 
   it('substitutes only within the substitution group, with a note', async () => {
