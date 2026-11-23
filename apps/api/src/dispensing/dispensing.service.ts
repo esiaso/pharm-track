@@ -94,9 +94,10 @@ export class DispensingService {
         message: `Refill requested before ${order.refillSchedule.earliestRefillDate!.toISOString().slice(0, 10)}, the earliest allowed date.`,
       });
     }
-    const evaluation = this.safety.evaluateOverrides(alerts, dto.overrides ?? []);
+    const evaluation = await this.safety.evaluateOverrides(alerts, dto.overrides ?? [], rx.facilityId, actor.id);
     if (!evaluation.canProceed) throw new SafetyBlockedException(evaluation);
     const reasons = new Map(evaluation.overridden.map((o) => [o.key, o.reason]));
+    const authorisedBy = new Map(evaluation.overridden.filter((o) => o.authorisedBy).map((o) => [o.key, o.authorisedBy!]));
 
     await this.prisma.$transaction(async (tx) => {
       if (alerts.length) {
@@ -110,11 +111,15 @@ export class DispensingService {
             message: a.message,
             overriddenBy: reasons.has(a.key) ? actor.id : null,
             overrideReason: reasons.get(a.key) ?? null,
+            overrideAuthorisedBy: authorisedBy.get(a.key) ?? null,
           })),
         });
       }
       await tx.dispenseOrder.update({ where: { id }, data: { status: 'VERIFIED', verifiedBy: actor.id, verifiedAt: new Date() } });
       await this.audit.log(tx, actor, 'dispense.verify', 'DispenseOrder', id, undefined, { alerts: alerts.length, overrides: evaluation.overridden });
+      for (const o of evaluation.overridden.filter((x) => x.severity === 'HARD_STOP')) {
+        await this.audit.log(tx, actor, 'safety.hard-stop-override', 'DispenseOrder', id, undefined, { alert: o.key, type: o.type, message: o.message, authorisedBy: o.authorisedBy, reason: o.reason });
+      }
     });
     return { order: await this.get(id), alerts };
   }

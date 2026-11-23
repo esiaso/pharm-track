@@ -114,4 +114,17 @@ export interface SafetyAlert {
 export interface SafetyOverride {
   key: string;
   reason: string;
+  /** Consultant who authorised overriding a HARD_STOP (only where the facility allows it). */
+  authorisedBy?: string;
 }
+
+/** A facility's override policy. */
+export interface OverridePolicy {
+  /** Lets a consultant authorise overriding a hard stop (off by default). */
+  hardStopOverride: boolean;
+  /** The user recording the override; a consultant cannot be the same person at verification. */
+  actorId?: string;
+}
+
+/** Shortest reason accepted for overriding a hard stop. */
+export const HARD_STOP_REASON_MIN = 15;

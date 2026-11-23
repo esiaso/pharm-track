@@ -136,9 +136,32 @@ describe('evaluateOverrides', () => {
     expect(r.overridden).toHaveLength(1);
   });
 
-  it('never lets a hard stop through', () => {
-    const r = evaluateOverrides([{ ...alerts[0]!, severity: 'HARD_STOP' }], [{ key: 'w1', reason: 'Consultant approved' }]);
+  it('never lets a hard stop through unless the facility allows consultant overrides', () => {
+    const hard = [{ ...alerts[0]!, severity: 'HARD_STOP' as const }];
+    const r = evaluateOverrides(hard, [{ key: 'w1', reason: 'Consultant approved this course', authorisedBy: 'dr.consultant' }]);
     expect(r.canProceed).toBe(false);
     expect(r.blocking).toHaveLength(1);
+    expect(r.overridable).toEqual([]);
+  });
+
+  it('lets a named consultant override a hard stop with a full reason, where allowed', () => {
+    const hard = [{ ...alerts[0]!, severity: 'HARD_STOP' as const }];
+    const policy = { hardStopOverride: true, actorId: 'pharm-1' };
+    const blocked = evaluateOverrides(hard, [], policy);
+    expect(blocked.overridable).toEqual(['w1']);
+    // No consultant, a short reason, or the pharmacist naming themselves: still blocked.
+    expect(evaluateOverrides(hard, [{ key: 'w1', reason: 'Benefit outweighs the risk here' }], policy).canProceed).toBe(false);
+    expect(evaluateOverrides(hard, [{ key: 'w1', reason: 'Approved', authorisedBy: 'dr.k' }], policy).canProceed).toBe(false);
+    expect(evaluateOverrides(hard, [{ key: 'w1', reason: 'Benefit outweighs the risk here', authorisedBy: 'PHARM-1' }], policy).canProceed).toBe(false);
+    const ok = evaluateOverrides(hard, [{ key: 'w1', reason: 'Benefit outweighs the risk here', authorisedBy: 'dr.kamau' }], policy);
+    expect(ok.canProceed).toBe(true);
+    expect(ok.overridden[0]).toMatchObject({ authorisedBy: 'dr.kamau', reason: 'Benefit outweighs the risk here' });
+  });
+
+  it('never lets a discontinued drug through', () => {
+    const hard = [{ key: 'f1', itemRef: 'x', type: 'FORMULARY' as const, severity: 'HARD_STOP' as const, message: 'Discontinued' }];
+    const r = evaluateOverrides(hard, [{ key: 'f1', reason: 'Benefit outweighs the risk here', authorisedBy: 'dr.kamau' }], { hardStopOverride: true });
+    expect(r.canProceed).toBe(false);
+    expect(r.overridable).toEqual([]);
   });
 });

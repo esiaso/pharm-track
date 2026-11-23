@@ -36,9 +36,11 @@ export class PrescriptionsService {
       }
     }
     const alerts = await this.safety.evaluate(dto.patientId, dto.context, lines, dto.facilityId);
-    const evaluation = this.safety.evaluateOverrides(alerts, dto.overrides ?? []);
+    // At prescribing the prescriber records the override; the consultant may be the prescriber.
+    const evaluation = await this.safety.evaluateOverrides(alerts, dto.overrides ?? [], dto.facilityId);
     if (!evaluation.canProceed) throw new SafetyBlockedException(evaluation);
     const overrideByKey = new Map(evaluation.overridden.map((o) => [o.key, o.reason]));
+    const authorisedByKey = new Map(evaluation.overridden.filter((o) => o.authorisedBy).map((o) => [o.key, o.authorisedBy!]));
 
     const signedAt = new Date(dto.signedAt);
     try {
@@ -86,6 +88,7 @@ export class PrescriptionsService {
                 message: a.message,
                 overriddenBy: overrideByKey.has(a.key) ? dto.prescriberId : null,
                 overrideReason: overrideByKey.get(a.key) ?? null,
+                overrideAuthorisedBy: authorisedByKey.get(a.key) ?? null,
               })),
             });
           }
@@ -105,6 +108,9 @@ export class PrescriptionsService {
           data: { prescriptionId: rx.id, kind: 'INITIAL', fillSequence: 0, facilityId: dto.facilityId, storeId: dto.storeId, priority: dto.priority ?? 'ROUTINE' },
         });
         await this.audit.log(tx, actor, 'prescription.receive', 'Prescription', rx.id, undefined, { externalId: dto.externalId, overrides: evaluation.overridden });
+        for (const o of evaluation.overridden.filter((x) => x.severity === 'HARD_STOP')) {
+          await this.audit.log(tx, actor, 'safety.hard-stop-override', 'Prescription', rx.id, undefined, { alert: o.key, type: o.type, message: o.message, authorisedBy: o.authorisedBy, reason: o.reason });
+        }
         await this.outbox.enqueue(tx, 'CLINITRACK', 'prescription.accepted', `prescription.accepted:${rx.id}`, {
           prescriptionId: rx.id,
           externalId: rx.externalId,

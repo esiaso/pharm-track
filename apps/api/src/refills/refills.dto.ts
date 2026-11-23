@@ -16,6 +16,8 @@ export class ContactPreferenceDto {
 export class FacilityProfileDto {
   @IsString() @MinLength(2) @MaxLength(80) name: string;
   @IsOptional() @IsString() @MaxLength(30) phone?: string;
+  /** Lets a consultant authorise overriding a hard-stop safety alert. */
+  @IsOptional() @IsBoolean() allowHardStopOverride?: boolean;
 }
 
 export class SmsTemplateDto {

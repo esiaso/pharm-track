@@ -3,14 +3,14 @@
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useMemo, useState } from 'react';
-import { SafetyAlerts } from '../../../components/SafetyAlerts';
+import { HARD_STOP_REASON_MIN, SafetyAlerts } from '../../../components/SafetyAlerts';
 import { Badge, Dl, Empty, ErrorBox, Field } from '../../../components/ui';
 import { api, ApiError, download, useApi } from '../../../lib/api';
 import { date, dateTime, label, n } from '../../../lib/format';
 import { useSession } from '../../../lib/session';
 import type { Alert, DispenseOrder, Drug, PrescriptionItem } from '../../../lib/types';
 
-type Blocked = { blocking: Alert[]; unacknowledged: Alert[] };
+type Blocked = { blocking: Alert[]; unacknowledged: Alert[]; overridable: string[] };
 
 export default function OrderPage() {
   const { id } = useParams<{ id: string }>();
@@ -152,7 +152,11 @@ function ItemSummary({ item, dispensed }: { item: PrescriptionItem; dispensed: n
                 <Badge value={a.severity} /> {label(a.type)} · {a.stage === 'PRESCRIBING' ? 'at prescribing' : 'at verification'}
               </div>
               <p>{a.message}</p>
-              {a.overrideReason && <p className="small muted">Overridden by {a.overriddenBy}: “{a.overrideReason}”</p>}
+              {a.overrideReason && (
+                <p className="small muted">
+                  Overridden by {a.overriddenBy}{a.overrideAuthorisedBy ? `, authorised by consultant ${a.overrideAuthorisedBy}` : ''}: “{a.overrideReason}”
+                </p>
+              )}
             </div>
           ))}
         </div>
@@ -164,20 +168,28 @@ function ItemSummary({ item, dispensed }: { item: PrescriptionItem; dispensed: n
 function VerifyPanel({ order, itemName, onDone, onStart }: { order: DispenseOrder; itemName: (r: string) => string; onDone: () => void; onStart: () => void }) {
   const [blocked, setBlocked] = useState<Blocked | null>(null);
   const [reasons, setReasons] = useState<Record<string, string>>({});
+  const [consultants, setConsultants] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const ready = !!blocked && blocked.blocking.length === 0 && blocked.unacknowledged.every((a) => (reasons[a.key] ?? '').trim().length >= 5);
+  const stuck = blocked?.blocking.filter((a) => !blocked.overridable.includes(a.key)) ?? [];
+  const ready =
+    !!blocked &&
+    stuck.length === 0 &&
+    blocked.blocking.every((a) => (consultants[a.key] ?? '').trim() && (reasons[a.key] ?? '').trim().length >= HARD_STOP_REASON_MIN) &&
+    blocked.unacknowledged.every((a) => (reasons[a.key] ?? '').trim().length >= 5);
 
   async function verify() {
     setBusy(true);
     setError(null);
     try {
-      const overrides = Object.entries(reasons).filter(([, r]) => r.trim()).map(([key, reason]) => ({ key, reason }));
+      const overrides = Object.entries(reasons)
+        .filter(([, r]) => r.trim())
+        .map(([key, reason]) => (consultants[key]?.trim() ? { key, reason, authorisedBy: consultants[key]!.trim() } : { key, reason }));
       await api(`/dispensing/orders/${order.id}/verify`, { body: { overrides } });
       setBlocked(null);
       onDone();
     } catch (e) {
-      if (e instanceof ApiError && e.status === 422) setBlocked({ blocking: e.body.blocking, unacknowledged: e.body.unacknowledged });
+      if (e instanceof ApiError && e.status === 422) setBlocked({ blocking: e.body.blocking, unacknowledged: e.body.unacknowledged, overridable: e.body.overridable ?? [] });
       else setError((e as Error).message);
     } finally {
       setBusy(false);
@@ -193,8 +205,11 @@ function VerifyPanel({ order, itemName, onDone, onStart }: { order: DispenseOrde
         <SafetyAlerts
           blocking={blocked.blocking}
           unacknowledged={blocked.unacknowledged}
+          overridable={blocked.overridable}
           reasons={reasons}
           onReason={(k, r) => setReasons({ ...reasons, [k]: r })}
+          consultants={consultants}
+          onConsultant={(k, c) => setConsultants({ ...consultants, [k]: c })}
           itemName={itemName}
         />
       )}
@@ -203,7 +218,7 @@ function VerifyPanel({ order, itemName, onDone, onStart }: { order: DispenseOrde
         <button className="primary" onClick={verify} disabled={busy || (!!blocked && !ready)}>
           {busy ? 'Checking…' : blocked ? 'Verify with overrides' : 'Run checks and verify'}
         </button>
-        {blocked && blocked.blocking.length > 0 && <span className="small muted">Hard stops must be resolved by the prescriber.</span>}
+        {stuck.length > 0 && <span className="small muted">Hard stops must be resolved by the prescriber.</span>}
       </div>
     </div>
   );

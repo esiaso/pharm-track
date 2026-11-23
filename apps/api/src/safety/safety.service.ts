@@ -25,11 +25,13 @@ export class SafetyService {
   async check(dto: SafetyCheckDto) {
     const lines = await this.resolveLines(dto.items);
     const alerts = await this.evaluate(dto.patientId, dto.context, lines, dto.facilityId);
-    const summary = evaluateOverrides(alerts, []);
+    const summary = await this.evaluateOverrides(alerts, [], dto.facilityId ?? '');
     return {
       alerts,
       canSign: summary.blocking.length === 0,
       requiresOverride: summary.unacknowledged.map((a) => a.key),
+      /** Hard stops a consultant may override at this facility (with authorisedBy and a reason). */
+      consultantOverridable: summary.overridable,
     };
   }
 
@@ -85,8 +87,10 @@ export class SafetyService {
     return runSafetyChecks(patient, items, rules);
   }
 
-  evaluateOverrides(alerts: SafetyAlert[], overrides: SafetyOverride[]) {
-    return evaluateOverrides(alerts, overrides);
+  /** Applies overrides under the facility's policy (consultant overrides of hard stops are off unless the facility allows them). */
+  async evaluateOverrides(alerts: SafetyAlert[], overrides: SafetyOverride[], facilityId: string, actorId?: string) {
+    const profile = await this.prisma.facilityProfile.findUnique({ where: { facilityId }, select: { allowHardStopOverride: true } });
+    return evaluateOverrides(alerts, overrides, { hardStopOverride: !!profile?.allowHardStopOverride, actorId });
   }
 
   /** Medicines dispensed to the patient whose supply has not yet run out. */

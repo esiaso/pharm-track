@@ -6,7 +6,7 @@ import { api, useApi } from '../../lib/api';
 import { dateTime } from '../../lib/format';
 import { hasRole, useSession } from '../../lib/session';
 
-type Profile = { facilityId: string; name: string; phone: string | null; updatedAt: string } | null;
+type Profile = { facilityId: string; name: string; phone: string | null; allowHardStopOverride: boolean; updatedAt: string } | null;
 type Template = {
   purpose: string;
   language: 'en' | 'sw';
@@ -67,6 +67,7 @@ export default function SettingsPage() {
         </p>
       </div>
       <ProfileCard fid={fid} profile={profile.data} error={profile.error} admin={admin} onSaved={(p) => profile.setData(p)} />
+      <SafetyPolicyCard fid={fid} profile={profile.data} admin={admin} onSaved={(p) => profile.setData(p)} />
       <SmsSection fid={fid} data={templates.data} error={templates.error} admin={admin} facility={facility} reload={templates.reload} />
     </section>
   );
@@ -117,6 +118,44 @@ function ProfileCard({ fid, profile, error, admin, onSaved }: { fid: string; pro
         </div>
       )}
     </form>
+  );
+}
+
+function SafetyPolicyCard({ fid, profile, admin, onSaved }: { fid: string; profile: Profile; admin: boolean; onSaved: (p: Profile) => void }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const on = !!profile?.allowHardStopOverride;
+  async function toggle(next: boolean) {
+    if (!profile) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      onSaved(await api<Profile>(`/facilities/${encodeURIComponent(fid)}/profile`, { method: 'PUT', body: { name: profile.name, phone: profile.phone ?? undefined, allowHardStopOverride: next } }));
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="card stack">
+      <div className="row" style={{ alignItems: 'baseline' }}>
+        <h3>Safety policy</h3>
+        <span className="spacer" />
+        <span className={`badge ${on ? 'warn' : 'neutral'}`}>{on ? 'Consultant override on' : 'Hard stops always block'}</span>
+      </div>
+      <p className="small muted" style={{ margin: 0 }}>
+        Hard-stop alerts (for example a confirmed severe allergy, a contraindicated diagnosis or a contraindicated interaction) normally
+        block prescribing and dispensing. If this facility&apos;s policy allows it, a consultant can authorise an override: the pharmacist or
+        prescriber records the consultant and a clinical reason, and each override is written to the audit log. Discontinued drugs can never be overridden.
+      </p>
+      <ErrorBox error={err} />
+      <label className="row small" style={{ alignItems: 'center' }}>
+        <input type="checkbox" checked={on} disabled={!admin || !profile || busy} onChange={(e) => void toggle(e.target.checked)} />
+        Let a consultant authorise overriding a hard stop at this facility
+      </label>
+      {!profile && <p className="small muted" style={{ margin: 0 }}>Save the facility profile first.</p>}
+    </div>
   );
 }
 

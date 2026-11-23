@@ -1,7 +1,9 @@
 import { atcChemicalSubgroup, atcMatches } from './codes';
+import { HARD_STOP_REASON_MIN } from './types';
 import type {
   AlertSeverity,
   DoseLimit,
+  OverridePolicy,
   PatientSafetyContext,
   ProposedItem,
   SafetyAlert,
@@ -278,30 +280,47 @@ function round(n: number): number {
 export interface OverrideEvaluation {
   /** True when nothing blocks signing / dispensing. */
   canProceed: boolean;
-  /** HARD_STOP alerts. These cannot be overridden. */
+  /** HARD_STOP alerts still blocking. */
   blocking: SafetyAlert[];
+  /** Keys of blocking alerts that a consultant may override at this facility. */
+  overridable: string[];
   /** WARNING alerts that still need an override reason. */
   unacknowledged: SafetyAlert[];
   /** Alerts with the override applied, for the override log. */
-  overridden: (SafetyAlert & { reason: string })[];
+  overridden: (SafetyAlert & { reason: string; authorisedBy?: string })[];
 }
+
+/** Hard stops no one can override: a drug that is not available (discontinued or not on the formulary). */
+const NEVER_OVERRIDABLE = new Set(['FORMULARY']);
 
 /**
  * Policy: INFO needs nothing; WARNING needs an override with a reason (min 5
- * characters); HARD_STOP cannot be overridden and blocks the prescription.
+ * characters). HARD_STOP blocks, unless the facility allows consultant
+ * overrides: then a consultant named in authorisedBy (not the person recording
+ * it) and a reason of at least 15 characters let it through. Formulary hard
+ * stops (discontinued drugs) are never overridable.
  */
-export function evaluateOverrides(alerts: SafetyAlert[], overrides: SafetyOverride[]): OverrideEvaluation {
+export function evaluateOverrides(alerts: SafetyAlert[], overrides: SafetyOverride[], policy: OverridePolicy = { hardStopOverride: false }): OverrideEvaluation {
   const byKey = new Map(overrides.map((o) => [o.key, o]));
   const blocking: SafetyAlert[] = [];
+  const overridable: string[] = [];
   const unacknowledged: SafetyAlert[] = [];
-  const overridden: (SafetyAlert & { reason: string })[] = [];
+  const overridden: OverrideEvaluation['overridden'] = [];
   for (const a of alerts) {
-    if (a.severity === 'HARD_STOP') blocking.push(a);
-    else if (a.severity === 'WARNING') {
-      const o = byKey.get(a.key);
+    const o = byKey.get(a.key);
+    if (a.severity === 'HARD_STOP') {
+      const allowed = policy.hardStopOverride && !NEVER_OVERRIDABLE.has(a.type);
+      const by = o?.authorisedBy?.trim();
+      if (allowed && o && by && o.reason.trim().length >= HARD_STOP_REASON_MIN && by.toLowerCase() !== policy.actorId?.toLowerCase()) {
+        overridden.push({ ...a, reason: o.reason.trim(), authorisedBy: by });
+      } else {
+        blocking.push(a);
+        if (allowed) overridable.push(a.key);
+      }
+    } else if (a.severity === 'WARNING') {
       if (o && o.reason.trim().length >= 5) overridden.push({ ...a, reason: o.reason.trim() });
       else unacknowledged.push(a);
     }
   }
-  return { canProceed: blocking.length === 0 && unacknowledged.length === 0, blocking, unacknowledged, overridden };
+  return { canProceed: blocking.length === 0 && unacknowledged.length === 0, blocking, overridable, unacknowledged, overridden };
 }
