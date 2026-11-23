@@ -8,6 +8,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import { timingSafeEqual } from 'node:crypto';
 import { SsoVerifier, ssoConfigFromEnv } from './sso';
 
 export { Role } from './roles';
@@ -16,6 +17,22 @@ import { Actor, Role } from './roles';
 
 const ROLES_KEY = 'roles';
 export const Roles = (...roles: Role[]) => SetMetadata(ROLES_KEY, roles);
+
+const WEBHOOK_KEY = 'webhook';
+/**
+ * For callbacks from outside services that cannot sign in (an SMS gateway's
+ * delivery reports). The caller must put SMS_WEBHOOK_SECRET in the URL as
+ * ?token=…; it then acts as a SYSTEM user named after the service.
+ */
+export const Webhook = (service: string) => SetMetadata(WEBHOOK_KEY, service);
+
+/** True when the token matches the secret (16+ characters), compared in constant time. */
+export function webhookTokenOk(token: unknown, secret: string | undefined): boolean {
+  if (!secret || secret.length < 16 || typeof token !== 'string') return false;
+  const a = Buffer.from(token);
+  const b = Buffer.from(secret);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
 
 let verifier: SsoVerifier | undefined;
 
@@ -62,6 +79,12 @@ export class RolesGuard implements CanActivate {
   async canActivate(ctx: ExecutionContext): Promise<boolean> {
     const req = ctx.switchToHttp().getRequest();
     if (req.path === '/health' || req.path === '/health/ready' || req.url?.startsWith('/docs')) return true;
+    const webhook = this.reflector.get<string | undefined>(WEBHOOK_KEY, ctx.getHandler());
+    if (webhook) {
+      if (!webhookTokenOk(req.query?.token, process.env.SMS_WEBHOOK_SECRET)) throw new UnauthorizedException('Missing or invalid webhook token.');
+      req.actor = { id: webhook, roles: [Role.SYSTEM] } satisfies Actor;
+      return true;
+    }
     const actor = await resolveActor(req.headers);
     if (!actor) throw new UnauthorizedException('Missing or invalid credentials.');
     req.actor = actor;

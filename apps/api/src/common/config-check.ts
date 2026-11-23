@@ -40,9 +40,15 @@ export function checkConfig(env: Record<string, string | undefined> = process.en
   if (sms === 'http') {
     if (!env.SMS_API_URL) errors.push('SMS_PROVIDER=http needs SMS_API_URL.');
     if (!env.SMS_API_KEY) errors.push('SMS_PROVIDER=http needs SMS_API_KEY.');
+  } else if (sms === 'africastalking') {
+    if (!env.AFRICASTALKING_USERNAME) errors.push('SMS_PROVIDER=africastalking needs AFRICASTALKING_USERNAME.');
+    if (!env.SMS_API_KEY) errors.push('SMS_PROVIDER=africastalking needs SMS_API_KEY (the Africa\'s Talking API key).');
+    if (prod && env.AFRICASTALKING_USERNAME === 'sandbox') warnings.push('AFRICASTALKING_USERNAME=sandbox: SMS go to the Africa\'s Talking simulator, not to patients.');
+    if (!env.SMS_SENDER_ID) warnings.push('SMS_SENDER_ID is not set: Africa\'s Talking sends from its shared short code.');
+    if (!env.SMS_WEBHOOK_SECRET || env.SMS_WEBHOOK_SECRET.length < 16) warnings.push('SMS_WEBHOOK_SECRET (16+ characters) is not set: delivery reports from Africa\'s Talking are refused.');
   } else if (sms === 'log') {
     if (prod) warnings.push('SMS_PROVIDER=log: patient SMS are written to the log, not sent.');
-  } else errors.push(`SMS_PROVIDER must be http or log, not "${sms}".`);
+  } else errors.push(`SMS_PROVIDER must be africastalking, http or log, not "${sms}".`);
 
   for (const check of [retentionFromEnv, labelSizeFromEnv, printersFromEnv]) {
     try {

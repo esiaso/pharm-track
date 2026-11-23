@@ -183,8 +183,8 @@ full REST surface in [openapi.json](api/openapi.json).
    (`ADR_SERIOUS_DAYS=7`, `ADR_NON_SERIOUS_DAYS=30`) are internal defaults to confirm.
 3. **CliniTrack and SupplyTrack endpoints.** The contracts in `docs/api` are
    PharmTrack's proposal; adjust the clients once those teams confirm.
-4. **SMS gateway.** `SMS_PROVIDER=http` posts a neutral payload; a provider-specific
-   adapter (e.g. Africa's Talking) is a small change in `sms.provider.ts`.
+4. **SMS gateway.** Africa's Talking is supported directly (`SMS_PROVIDER=africastalking`,
+   with delivery reports). `SMS_PROVIDER=http` posts a neutral payload for other gateways.
 5. **Hard stops cannot be overridden.** Some facilities allow a consultant override;
    that would be a policy flag.
 

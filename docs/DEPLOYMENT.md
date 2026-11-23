@@ -61,7 +61,7 @@ error stops it, and the log lists every problem at once.
 | `AUTH_MODE=oidc`, `SSO_ISSUER`, `SSO_AUDIENCE` | yes | `dev-headers` is refused in production. |
 | `CLINITRACK_BASE_URL`, `CLINITRACK_TOKEN` | yes | `https` expected; localhost is refused. |
 | `SUPPLYTRACK_BASE_URL`, `SUPPLYTRACK_TOKEN` | yes | As above. |
-| `SMS_PROVIDER=http`, `SMS_API_URL`, `SMS_API_KEY`, `SMS_SENDER_ID` | for SMS | `log` only writes messages to the log (a warning in production). |
+| `SMS_PROVIDER=africastalking`, `AFRICASTALKING_USERNAME`, `SMS_API_KEY`, `SMS_SENDER_ID`, `SMS_WEBHOOK_SECRET` | for SMS | See **SMS through Africa's Talking** below. `http` with `SMS_API_URL` posts to a generic gateway instead. `log` only writes messages to the log (a warning in production). |
 | `JOBS_ENABLED` | no | `false` on request-serving replicas when you run a separate worker. |
 | `RUN_MIGRATIONS` | no | `true` in the one place that applies migrations. |
 | `TRUST_PROXY` | behind a proxy | `true` or the number of proxy hops. |
@@ -70,6 +70,25 @@ error stops it, and the log lists every problem at once.
 | `LABEL_PRINTERS` | for Zebra printing | See below. |
 
 Everything else has sensible defaults; see `apps/api/.env.example`.
+
+## SMS through Africa's Talking
+
+1. In the Africa's Talking dashboard, create an API key and request a sender
+   id (alphanumeric, approved by the networks). Until it is approved, leave
+   `SMS_SENDER_ID` empty and messages come from the shared short code.
+2. Set `SMS_PROVIDER=africastalking`, `AFRICASTALKING_USERNAME` (your app's
+   username; `sandbox` sends to the simulator), `SMS_API_KEY` and
+   `SMS_SENDER_ID`.
+3. Pick a random `SMS_WEBHOOK_SECRET` of 16 or more characters and set the SMS
+   delivery-report callback in the dashboard to
+   `https://<public API address>/api/v1/notifications/sms/africastalking/delivery-reports?token=<secret>`.
+   Reports without the right token are refused.
+
+Messages show as Sent when Africa's Talking accepts them, then Delivered or
+Failed when the report arrives. A refusal that cannot change on retry (invalid
+number, number blacklisted, wrong API key) fails at once; others are retried
+up to 5 times with back-off. Set each facility's name, phone and wording on
+the **Settings** screen first, so messages don't say "the pharmacy".
 
 ## Zebra label printers
 

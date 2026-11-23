@@ -326,4 +326,37 @@ run('FHIR facade and data protection end-to-end', () => {
     expect((await api().get(`${base}/sms-templates`).set(ADMIN).expect(200)).body.templates.find((t: any) => t.purpose === 'REFILL_REMINDER' && t.language === 'en').source).toBe('default');
     expect(await prisma.auditLog.count({ where: { action: { in: ['facility-profile.update', 'sms-template.update', 'sms-template.reset'] }, actorId: 'u-dpo' } })).toBe(3);
   });
+  it("takes delivery reports from Africa's Talking only with the webhook token", async () => {
+    process.env.SMS_WEBHOOK_SECRET = 'a-long-webhook-secret';
+    const n = await prisma.notification.create({
+      data: { patientId: 'PAT-AT', purpose: 'READY_FOR_COLLECTION', channel: 'SMS', body: 'Ready', dedupeKey: 'at-1', status: 'SENT', providerMessageId: 'ATXid_e2e' },
+    });
+    const url = '/api/v1/notifications/sms/africastalking/delivery-reports';
+    const form = 'id=ATXid_e2e&status=Success&phoneNumber=%2B254711000111&networkCode=63902&retryCount=0';
+    await api().post(url).type('form').send(form).expect(401);
+    await api().post(`${url}?token=wrong-token-wrong-token`).type('form').send(form).expect(401);
+    // Intermediate statuses change nothing.
+    expect((await api().post(`${url}?token=a-long-webhook-secret`).type('form').send('id=ATXid_e2e&status=Buffered').expect(200)).body).toEqual({ updated: false });
+    expect((await api().post(`${url}?token=a-long-webhook-secret`).type('form').send(form).expect(200)).body).toEqual({ updated: true });
+    expect((await prisma.notification.findUniqueOrThrow({ where: { id: n.id } })).status).toBe('DELIVERED');
+    delete process.env.SMS_WEBHOOK_SECRET;
+  });
+
+  it('fails an SMS at once when the gateway refuses it for good', async () => {
+    await prisma.patientContactPreference.upsert({
+      where: { patientId: 'PAT-AT2' },
+      create: { patientId: 'PAT-AT2', firstName: 'Juma', phoneE164: '+254711000222', smsOptIn: true, language: 'en' },
+      update: {},
+    });
+    const notifications = app.get(NotificationsService);
+    const n = await notifications.queue({ patientId: 'PAT-AT2', facilityId: 'FAC-1', purpose: 'READY_FOR_COLLECTION', dedupeKey: 'at-2', vars: {} });
+    const real = sms.send.bind(sms);
+    const send = jest.spyOn(sms, 'send').mockImplementation(async (to: string, body: string) => {
+      if (to === '+254711000222') throw Object.assign(new Error('InvalidPhoneNumber (403)'), { retryable: false });
+      return real(to, body);
+    });
+    await notifications.sendDue();
+    send.mockRestore();
+    expect(await prisma.notification.findUniqueOrThrow({ where: { id: n.id } })).toMatchObject({ status: 'FAILED', attempts: 1 });
+  });
 });

@@ -38,6 +38,20 @@ describe('startup settings check', () => {
     expect(r.warnings).toHaveLength(3);
   });
 
+  it("checks the Africa's Talking settings", () => {
+    const at = { ...PROD_OK, SMS_PROVIDER: 'africastalking', SMS_API_URL: '', AFRICASTALKING_USERNAME: 'clinic', SMS_SENDER_ID: 'SYNERGY', SMS_WEBHOOK_SECRET: 'a-long-webhook-secret' };
+    expect(checkConfig(at)).toEqual({ errors: [], warnings: [] });
+    expect(checkConfig({ ...at, AFRICASTALKING_USERNAME: '', SMS_API_KEY: '' }).errors).toEqual([
+      'SMS_PROVIDER=africastalking needs AFRICASTALKING_USERNAME.',
+      expect.stringMatching(/needs SMS_API_KEY/),
+    ]);
+    expect(checkConfig({ ...at, AFRICASTALKING_USERNAME: 'sandbox', SMS_SENDER_ID: '', SMS_WEBHOOK_SECRET: 'short' }).warnings).toEqual([
+      expect.stringMatching(/simulator/),
+      expect.stringMatching(/shared short code/),
+      expect.stringMatching(/delivery reports .* are refused/),
+    ]);
+  });
+
   it('lets local development run on defaults', () => {
     expect(checkConfig({ DATABASE_URL: 'postgresql://localhost/pt' }).errors).toEqual([]);
   });
