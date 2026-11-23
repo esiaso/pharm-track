@@ -1,4 +1,4 @@
-import { IsBoolean, IsIn, IsOptional, IsString, MinLength } from 'class-validator';
+import { IsBoolean, IsIn, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 
 export class RequestRefillDto {
   @IsOptional() @IsIn(['STAT', 'URGENT', 'ROUTINE']) priority?: 'STAT' | 'URGENT' | 'ROUTINE';
@@ -14,8 +14,8 @@ export class ContactPreferenceDto {
 }
 
 export class FacilityProfileDto {
-  @IsString() name: string;
-  @IsOptional() @IsString() phone?: string;
+  @IsString() @MinLength(2) @MaxLength(80) name: string;
+  @IsOptional() @IsString() @MaxLength(30) phone?: string;
 }
 
 export class SmsTemplateDto {
@@ -23,7 +23,7 @@ export class SmsTemplateDto {
   @IsIn(['REFILL_REMINDER', 'REFILL_DUE', 'REFILL_OVERDUE', 'READY_FOR_COLLECTION'])
   purpose: 'REFILL_REMINDER' | 'REFILL_DUE' | 'REFILL_OVERDUE' | 'READY_FOR_COLLECTION';
   @IsIn(['en', 'sw']) language: 'en' | 'sw';
-  @IsString() @MinLength(10) body: string;
+  @IsString() @MinLength(10) @MaxLength(480) body: string;
   @IsOptional() @IsBoolean() active?: boolean;
 }
 

@@ -57,9 +57,11 @@ for SynergyOne as a whole.
    7-year period. Today it is removed with the patient's other records.
 2. **Backups** keep removed records until they expire; set backup retention to
    match.
-3. **SMS wording**: refill messages name the medicine. On a shared phone that
-   reveals health information. Consider a template without the drug name, set
-   per facility in the SMS templates.
+3. **SMS wording**: the built-in refill messages name the medicine, which on a
+   shared phone reveals health information. Administrators can now switch each
+   facility to wording without the medicine name on the **Settings** screen
+   (one button for all messages). Decide whether that should be the default
+   for the whole suite.
 4. **Processor agreements** with the SMS gateway and the hosting provider, and
    where each stores data.
 5. **Erasure across the suite**: CliniTrack is the source of contact details.

@@ -1,9 +1,9 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { NotificationPurpose } from '@prisma/client';
 import { Actor } from '../common/auth';
 import { AuditService } from '../common/audit.service';
-import { DEFAULT_TEMPLATES, normaliseKenyanMobile, renderTemplate } from '../domain/sms';
+import { DEFAULT_TEMPLATES, normaliseKenyanMobile, PLACEHOLDERS, PRIVATE_TEMPLATES, renderTemplate, unknownPlaceholders } from '../domain/sms';
 import { backoffMs } from '../integrations/outbox.service';
 import { SmsProvider } from '../integrations/sms.provider';
 import { PrismaService } from '../prisma/prisma.service';
@@ -166,17 +166,71 @@ export class NotificationsService {
     return this.prisma.patientContactPreference.findUnique({ where: { patientId } });
   }
 
-  setFacilityProfile(facilityId: string, dto: FacilityProfileDto) {
-    return this.prisma.facilityProfile.upsert({ where: { facilityId }, create: { facilityId, ...dto }, update: dto });
+  getFacilityProfile(facilityId: string) {
+    return this.prisma.facilityProfile.findUnique({ where: { facilityId } });
   }
 
-  async upsertTemplate(dto: SmsTemplateDto) {
+  async setFacilityProfile(facilityId: string, dto: FacilityProfileDto, actor: Actor) {
+    const data = { name: dto.name.trim(), phone: dto.phone?.trim() || null };
+    return this.prisma.$transaction(async (tx) => {
+      const before = await tx.facilityProfile.findUnique({ where: { facilityId } });
+      const after = await tx.facilityProfile.upsert({ where: { facilityId }, create: { facilityId, ...data }, update: data });
+      await this.audit.log(tx, actor, 'facility-profile.update', 'FacilityProfile', facilityId, before, after);
+      return after;
+    });
+  }
+
+  async upsertTemplate(dto: SmsTemplateDto, actor: Actor) {
+    const unknown = unknownPlaceholders(dto.body);
+    if (unknown.length) {
+      throw new BadRequestException(`Unknown placeholder ${unknown.map((k) => `{{${k}}}`).join(', ')}. Use ${PLACEHOLDERS.map((k) => `{{${k}}}`).join(', ')}.`);
+    }
     const facilityId = dto.facilityId ?? null;
-    const existing = await this.prisma.smsTemplate.findFirst({ where: { facilityId, purpose: dto.purpose, language: dto.language } });
-    const data = { facilityId, purpose: dto.purpose, language: dto.language, body: dto.body, active: dto.active ?? true };
-    return existing
-      ? this.prisma.smsTemplate.update({ where: { id: existing.id }, data })
-      : this.prisma.smsTemplate.create({ data });
+    const data = { facilityId, purpose: dto.purpose, language: dto.language, body: dto.body.trim(), active: dto.active ?? true };
+    return this.prisma.$transaction(async (tx) => {
+      const existing = await tx.smsTemplate.findFirst({ where: { facilityId, purpose: dto.purpose, language: dto.language } });
+      const saved = existing ? await tx.smsTemplate.update({ where: { id: existing.id }, data }) : await tx.smsTemplate.create({ data });
+      await this.audit.log(tx, actor, 'sms-template.update', 'SmsTemplate', saved.id, existing ?? undefined, saved);
+      return saved;
+    });
+  }
+
+  /** Removes a facility's own wording, so the suite-wide or built-in wording applies again. */
+  async resetTemplate(facilityId: string, purpose: NotificationPurpose, language: string, actor: Actor) {
+    return this.prisma.$transaction(async (tx) => {
+      const existing = await tx.smsTemplate.findFirst({ where: { facilityId, purpose, language } });
+      if (!existing) return { removed: false };
+      await tx.smsTemplate.delete({ where: { id: existing.id } });
+      await this.audit.log(tx, actor, 'sms-template.reset', 'SmsTemplate', existing.id, existing, undefined);
+      return { removed: true };
+    });
+  }
+
+  /**
+   * The wording in force for each message and language at a facility, where it
+   * comes from (facility, suite or built-in), and the wording without the medicine name.
+   */
+  async effectiveTemplates(facilityId: string) {
+    const rows = await this.prisma.smsTemplate.findMany({ where: { OR: [{ facilityId }, { facilityId: null }], active: true } });
+    const out = [];
+    for (const purpose of Object.keys(DEFAULT_TEMPLATES) as NotificationPurpose[]) {
+      for (const language of ['en', 'sw']) {
+        const own = rows.find((r) => r.facilityId === facilityId && r.purpose === purpose && r.language === language);
+        const suite = rows.find((r) => r.facilityId === null && r.purpose === purpose && r.language === language);
+        const body = own?.body ?? suite?.body ?? DEFAULT_TEMPLATES[purpose][language];
+        out.push({
+          purpose,
+          language,
+          body,
+          source: own ? 'facility' : suite ? 'suite' : 'default',
+          updatedAt: (own ?? suite)?.updatedAt ?? null,
+          namesMedicine: /\{\{\s*drugName\s*\}\}/.test(body),
+          defaultBody: suite?.body ?? DEFAULT_TEMPLATES[purpose][language],
+          privateBody: PRIVATE_TEMPLATES[purpose][language],
+        });
+      }
+    }
+    return { placeholders: PLACEHOLDERS, templates: out };
   }
 
   list(filter: { patientId?: string; status?: string }) {
