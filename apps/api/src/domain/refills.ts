@@ -118,3 +118,46 @@ export function proportionOfDaysCovered(
   }
   return covered.size / totalDays;
 }
+
+/** PDC at or above this counts as adherent (the usual 80% threshold). */
+export const ADHERENT_PDC = 0.8;
+
+export interface AdherenceSummary {
+  fills: number;
+  /** Days between fills minus the days of supply, on average. Negative means early. */
+  averageDaysLate: number;
+  /** Refills collected more than `graceDays` after the supply ran out. */
+  lateRefills: number;
+  /** Proportion of days covered over the observed days, 0..1; null when no day is observed. */
+  pdc: number | null;
+  observedDays: number;
+}
+
+/**
+ * Adherence for one refill item from its fill dates. Days are observed from
+ * the later of the period start and the first fill, to the earlier of the
+ * period end and `therapyEnd` (when the course has finished or expired), so a
+ * finished course doesn't count as missed days. Fills before the period still
+ * cover the start of it.
+ */
+export function adherenceSummary(p: {
+  fillDates: Date[];
+  daysOfSupply: number;
+  graceDays: number;
+  periodStart: Date;
+  periodEnd: Date;
+  therapyEnd?: Date | null;
+}): AdherenceSummary {
+  const dates = [...p.fillDates].sort((a, b) => a.getTime() - b.getTime());
+  const gaps = dates.slice(1).map((d, i) => Math.round((startOfDay(d).getTime() - startOfDay(dates[i]!).getTime()) / 86_400_000) - p.daysOfSupply);
+  const averageDaysLate = gaps.length ? Math.round((gaps.reduce((a, b) => a + b, 0) / gaps.length) * 10) / 10 : 0;
+  const lateRefills = gaps.filter((g) => g > p.graceDays).length;
+  if (!dates.length) return { fills: 0, averageDaysLate, lateRefills, pdc: null, observedDays: 0 };
+  const start = new Date(Math.max(startOfDay(p.periodStart).getTime(), startOfDay(dates[0]!).getTime()));
+  const endCap = p.therapyEnd ? Math.min(startOfDay(p.periodEnd).getTime(), startOfDay(p.therapyEnd).getTime()) : startOfDay(p.periodEnd).getTime();
+  const end = new Date(endCap);
+  const observedDays = Math.round((end.getTime() - start.getTime()) / 86_400_000) + 1;
+  if (observedDays <= 0) return { fills: dates.length, averageDaysLate, lateRefills, pdc: null, observedDays: 0 };
+  const pdc = proportionOfDaysCovered(dates.map((dispensedAt) => ({ dispensedAt, daysOfSupply: p.daysOfSupply })), start, end);
+  return { fills: dates.length, averageDaysLate, lateRefills, pdc: Math.round(pdc * 1000) / 1000, observedDays };
+}

@@ -271,6 +271,16 @@ run('PharmTrack end-to-end', () => {
     await app.get(OutboxService).dispatchDue();
     const refillBill = clinitrack.events.filter((e) => e.type === 'dispense.completed').pop()!;
     expect(refillBill.payload).toMatchObject({ fillType: 'REFILL', fillSequence: 1, priceListCode: 'SHA' });
+
+    // Two 30-day fills on the same day: covered, collected 30 days early, nothing late.
+    const adh = await api().get(`/api/v1/refills/${scheduleId}/adherence`).set(PHARMACIST).expect(200);
+    expect(adh.body).toMatchObject({ fills: 2, daysOfSupplyPerFill: 30, averageDaysLate: -30, lateRefills: 0, pdc: 1 });
+    const report = await api().get('/api/v1/reports/adherence').query({ facilityId: 'FAC-1' }).set(PHARMACIST).expect(200);
+    expect(report.body.rows.find((r: { scheduleId: string }) => r.scheduleId === scheduleId)).toMatchObject({ patientId: 'PAT-1', fills: 2, pdc: 1, adherent: true });
+    expect(report.body.summary).toMatchObject({ pctAdherent: 100, lateRefills: 0 });
+    const csv = await api().get('/api/v1/reports/adherence').query({ facilityId: 'FAC-1', format: 'csv' }).set(PHARMACIST).expect(200);
+    expect(csv.text.split('\n')[0]).toContain('pdc_pct');
+    expect(await prisma.patientAccessLog.count({ where: { patientId: 'PAT-1', action: 'reports.adherence' } })).toBe(2);
   });
 
   it('requires a different witness for controlled drugs', async () => {

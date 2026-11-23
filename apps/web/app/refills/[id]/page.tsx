@@ -11,7 +11,7 @@ type Detail = RefillSchedule & {
   dispenseOrders: { id: string; kind: string; fillSequence: number; status: string; createdAt: string }[];
   notifications: Notification[];
 };
-type Adherence = { fills: number; daysOfSupplyPerFill: number; averageDaysLate: number };
+type Adherence = { fills: number; daysOfSupplyPerFill: number; averageDaysLate: number; lateRefills: number; pdc: number | null };
 
 export default function RefillDetail() {
   const { id } = useParams<{ id: string }>();
@@ -40,6 +40,8 @@ export default function RefillDetail() {
             ['Valid until', date(s.expiresAt)],
             ['Days of supply per fill', adh ? String(adh.daysOfSupplyPerFill) : '–'],
             ['Average days late', adh && adh.fills > 1 ? adh.averageDaysLate.toFixed(1) : '–'],
+            ['Late refills', adh && adh.fills > 1 ? String(adh.lateRefills) : '–'],
+            ['Days covered (PDC)', adh && adh.pdc !== null ? `${Math.round(adh.pdc * 1000) / 10}%` : '–'],
           ]}
         />
       </div>

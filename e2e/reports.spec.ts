@@ -10,7 +10,7 @@ test('a pharmacist reads the controlled-drug register and downloads it', async (
     items: [{ ref: 'L1', hptCode: 'SAMPLE-HPT-0006', atcCode: 'N02AA01', dose: 10, doseUnit: 'mg', frequency: 'Q4H', frequencyPerDay: 6, route: 'ORAL', durationDays: 2, quantity: 12 }],
   });
   const order = await (await request.get(`${API}/dispensing/orders/${orderId}`, { headers: pharmacist('pharm-1') })).json();
-  const itemId = order.prescription?.items?.[0]?.id ?? order.items?.[0]?.id;
+  const itemId = order.prescription.items[0].id;
   expect((await request.post(`${API}/dispensing/orders/${orderId}/verify`, { headers: pharmacist('pharm-1'), data: {} })).ok()).toBe(true);
   const done = await request.post(`${API}/dispensing/orders/${orderId}/dispense`, {
     headers: pharmacist('pharm-1'),
@@ -32,5 +32,31 @@ test('a pharmacist reads the controlled-drug register and downloads it', async (
   const csv = await (await import('node:fs/promises')).readFile((await file.path())!, 'utf8');
   expect(csv).toContain('witnessed_by');
   expect(csv).toContain(externalId);
+  expect(errors).toEqual([]);
+});
+
+test('a pharmacist sees refill adherence by patient', async ({ page, request }) => {
+  const { orderId } = await receivePrescription(request, { patientId: 'PAT-ADH' });
+  const order = await (await request.get(`${API}/dispensing/orders/${orderId}`, { headers: pharmacist('pharm-1') })).json();
+  expect((await request.post(`${API}/dispensing/orders/${orderId}/verify`, { headers: pharmacist('pharm-1'), data: {} })).ok()).toBe(true);
+  const done = await request.post(`${API}/dispensing/orders/${orderId}/dispense`, {
+    headers: pharmacist('pharm-1'),
+    data: { lines: [{ prescriptionItemId: order.prescription.items[0].id, quantity: 60 }] },
+  });
+  expect(done.ok(), await done.text()).toBe(true);
+
+  const errors = consoleErrors(page);
+  await signIn(page, 'PHARMACIST');
+  await page.goto('/reports#adherence');
+  const row = page.getByRole('table', { name: 'Adherence by patient' }).getByRole('row').filter({ hasText: 'PAT-ADH' });
+  await expect(row).toContainText('Metformin');
+  await expect(row).toContainText('100%');
+  await expect(page.getByText('median days covered')).toBeVisible();
+  await page.getByLabel(/Only below/).check();
+  await expect(row).toHaveCount(0);
+
+  await page.getByLabel(/Only below/).uncheck();
+  await row.getByRole('link', { name: /Metformin/ }).click();
+  await expect(page.getByText('Days covered (PDC)')).toBeVisible();
   expect(errors).toEqual([]);
 });

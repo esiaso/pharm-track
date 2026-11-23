@@ -8,6 +8,8 @@ import { adrDueBy, dddCount, Encounter, indicatorsByPrescriber, monthPeriod, pre
 import { OutboxService } from '../integrations/outbox.service';
 import { num, PrismaService } from '../prisma/prisma.service';
 import { toPpbReport } from '../records/records.service';
+import { ADHERENT_PDC, adherenceSummary, daysOfSupply } from '../domain/refills';
+import { fillDates, supplyInputs, therapyEnd } from '../refills/refills.service';
 
 export interface Check {
   level: 'warning' | 'info';
@@ -96,6 +98,63 @@ export class ReportsService {
   async refillSummary(facilityId?: string) {
     const groups = await this.prisma.refillSchedule.groupBy({ by: ['status'], where: { facilityId }, _count: { _all: true } });
     return groups.map((g) => ({ status: g.status, count: g._count._all }));
+  }
+
+  /**
+   * Adherence for every refill item at a facility with a fill, from refill
+   * timeliness: proportion of days covered (PDC) in the period, late refills
+   * and average lateness. PDC of 80% or more counts as adherent.
+   */
+  async adherence(filter: Period) {
+    const schedules = await this.prisma.refillSchedule.findMany({
+      where: { facilityId: filter.facilityId, lastDispensedAt: { not: null }, createdAt: { lt: filter.to } },
+      include: { prescriptionItem: { include: { drug: true } } },
+      take: 5000,
+    });
+    const lines = await this.prisma.dispenseLine.findMany({
+      where: { prescriptionItemId: { in: schedules.map((s) => s.prescriptionItemId) }, dispensedAt: { lt: filter.to } },
+      select: { prescriptionItemId: true, dispenseOrderId: true, dispensedAt: true },
+    });
+    const byItem = new Map<string, typeof lines>();
+    for (const l of lines) byItem.set(l.prescriptionItemId, [...(byItem.get(l.prescriptionItemId) ?? []), l]);
+    const rows = schedules
+      .map((s) => {
+        const days = daysOfSupply(supplyInputs(s.prescriptionItem));
+        const a = adherenceSummary({ fillDates: fillDates(byItem.get(s.prescriptionItemId) ?? []), daysOfSupply: days, graceDays: s.graceDays, periodStart: filter.from, periodEnd: filter.to, therapyEnd: therapyEnd(s, days) });
+        return {
+          scheduleId: s.id,
+          patientId: s.patientId,
+          hptCode: s.prescriptionItem.drug.hptCode,
+          genericName: s.prescriptionItem.drug.genericName,
+          strength: s.prescriptionItem.drug.strength,
+          daysOfSupplyPerFill: days,
+          refillsUsed: s.refillsUsed,
+          refillsAuthorised: s.refillsAuthorised,
+          status: s.status,
+          nextDueDate: s.nextDueDate,
+          ...a,
+          adherent: a.pdc !== null && a.pdc >= ADHERENT_PDC,
+        };
+      })
+      .filter((r) => r.pdc !== null)
+      .sort((a, b) => a.pdc! - b.pdc! || a.patientId.localeCompare(b.patientId));
+    const pdcs = rows.map((r) => r.pdc!).sort((a, b) => a - b);
+    const median = pdcs.length ? (pdcs.length % 2 ? pdcs[(pdcs.length - 1) / 2]! : (pdcs[pdcs.length / 2 - 1]! + pdcs[pdcs.length / 2]!) / 2) : null;
+    return {
+      from: filter.from,
+      to: filter.to,
+      facilityId: filter.facilityId ?? null,
+      threshold: ADHERENT_PDC,
+      summary: {
+        items: rows.length,
+        patients: new Set(rows.map((r) => r.patientId)).size,
+        medianPdc: median === null ? null : round(median, 3),
+        pctAdherent: rows.length ? round((rows.filter((r) => r.adherent).length / rows.length) * 100, 1) : 0,
+        lateRefills: rows.reduce((n, r) => n + r.lateRefills, 0),
+        overdueNow: rows.filter((r) => r.status === 'OVERDUE').length,
+      },
+      rows,
+    };
   }
 
   /**
@@ -475,6 +534,16 @@ export function controlledRegisterCsv(rows: { recordedAt: Date; facilityId: stri
       recorded_at: r.recordedAt.toISOString(), facility_id: r.facilityId, store_id: r.storeId, hpt_code: r.hptCode, generic_name: r.genericName, strength: r.strength,
       schedule: r.schedule, patient_id: r.patientId, prescription_ref: r.prescriptionRef, prescriber_id: r.prescriberId, batch_number: r.batchNumber,
       quantity: r.quantity, quantity_returned: r.quantityReturned, unit: r.unitOfIssue, dispensed_by: r.dispensedBy, witnessed_by: r.witnessedBy,
+    })),
+  );
+}
+
+export function adherenceCsv(rows: { patientId: string; hptCode: string; genericName: string; strength: string; fills: number; daysOfSupplyPerFill: number; observedDays: number; pdc: number | null; adherent: boolean; lateRefills: number; averageDaysLate: number; status: string }[]) {
+  return toCsv(
+    ['patient_id', 'hpt_code', 'generic_name', 'strength', 'fills', 'days_of_supply_per_fill', 'observed_days', 'pdc_pct', 'adherent', 'late_refills', 'average_days_late', 'status'],
+    rows.map((r) => ({
+      patient_id: r.patientId, hpt_code: r.hptCode, generic_name: r.genericName, strength: r.strength, fills: r.fills, days_of_supply_per_fill: r.daysOfSupplyPerFill,
+      observed_days: r.observedDays, pdc_pct: r.pdc === null ? '' : round(r.pdc * 100, 1), adherent: r.adherent ? 'yes' : 'no', late_refills: r.lateRefills, average_days_late: r.averageDaysLate, status: r.status,
     })),
   );
 }

@@ -10,6 +10,7 @@ const TONE: Record<string, string> = {
   DISPENSED: 'ok', CANCELLED: 'neutral', RETURNED: 'neutral',
   UPCOMING: 'neutral', DUE: 'warn', OVERDUE: 'danger', COMPLETED: 'ok', EXPIRED: 'neutral',
   CONTROLLED: 'warn', OPEN_RECALL: 'danger', OUT_OF_STOCK: 'danger', LOW_STOCK: 'warn', DEAD: 'danger', ACTIVE: 'ok', DRAFT: 'info', RETIRED: 'neutral', SUBMITTED: 'ok', SUPERSEDED: 'neutral', SERIOUS: 'danger', ANTIMICROBIAL: 'warn', CONTRAINDICATED: 'danger', MAJOR: 'danger', MINOR: 'info', FULL: 'warn', PARTIAL: 'neutral', RESTRICTED: 'warn', NON_FORMULARY: 'warn', DISCONTINUED: 'danger',
+  BELOW_THRESHOLD: 'warn',
   QUEUED: 'info', SENT: 'ok', DELIVERED: 'ok', FAILED: 'danger', SKIPPED_NO_CONSENT: 'neutral',
   BILLED: 'ok', REVERSED: 'neutral', CONFIRMED: 'danger', UNCONFIRMED: 'warn', REFUTED: 'neutral',
   SEVERE: 'danger', LIFE_THREATENING: 'danger', MODERATE: 'warn', MILD: 'info',
