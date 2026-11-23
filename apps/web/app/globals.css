@@ -279,3 +279,11 @@ button.link:hover { text-decoration: underline; }
 }
 .print-only { display: none; }
 @media print { .print-only { display: grid; } }
+
+/* Detail pages: keep codes, batches and amounts on one line, and use two columns for details on phones. */
+td .mono, td.mono, td.right { white-space: nowrap; }
+.dl dd { overflow-wrap: anywhere; }
+@media (max-width: 640px) {
+  .dl { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 16px; }
+  th, td { padding: 10px 12px; }
+}
