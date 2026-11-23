@@ -39,7 +39,7 @@ systems. The **WHO ATC code** travels with it for classification and reporting.
 | `prescriptions/` | Receives signed prescriptions from CliniTrack, idempotently. Medication history. |
 | `dispensing/` | Queue, verification, FEFO dispensing via SupplyTrack, billing to CliniTrack, returns, controlled-drug register. |
 | `refills/` | Refill schedules, refill requests, daily reminders, SMS notifications and consent. |
-| `reports/` | Consumption, antimicrobial use, refill status, safety overrides, monthly returns, stock-outs, prescribing indicators, PPB ADR queue. |
+| `reports/` | Consumption, antimicrobial use, refill status, safety overrides, monthly returns, stock-outs, prescribing indicators, controlled-drug register (`GET /reports/controlled-drugs`, patient reads logged), PPB ADR queue. |
 | `fhir/` | Read-only FHIR R4 facade: Medication, MedicationRequest, MedicationDispense, AllergyIntolerance, AdverseEvent. See [FHIR.md](FHIR.md). |
 | `privacy/` | Patient access log, data export and erasure of contact details, retention job. See [DATA-PROTECTION.md](DATA-PROTECTION.md). |
 | `integrations/` | SupplyTrack and CliniTrack clients, SMS gateway adapter, transactional outbox. |

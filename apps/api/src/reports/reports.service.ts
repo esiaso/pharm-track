@@ -98,6 +98,71 @@ export class ReportsService {
     return groups.map((g) => ({ status: g.status, count: g._count._all }));
   }
 
+  /**
+   * Controlled-drug register: every controlled dispense in the period with its
+   * dual sign-off, oldest first, and totals per drug. Returns are shown against
+   * the line they came back on.
+   */
+  async controlledRegister(filter: Period & { storeId?: string; drugId?: string }) {
+    const entries = await this.prisma.controlledDrugRegisterEntry.findMany({
+      where: {
+        recordedAt: { gte: filter.from, lt: filter.to },
+        drugId: filter.drugId,
+        dispenseLine: { dispenseOrder: { facilityId: filter.facilityId, storeId: filter.storeId } },
+      },
+      include: {
+        drug: { select: { id: true, genericName: true, strength: true, dosageForm: true, unitOfIssue: true, hptCode: true, controlledSchedule: true } },
+        dispenseLine: {
+          select: {
+            batchNumber: true, quantityReturned: true,
+            dispenseOrder: { select: { id: true, facilityId: true, storeId: true, prescription: { select: { externalId: true, prescriberId: true } } } },
+          },
+        },
+      },
+      orderBy: { recordedAt: 'asc' },
+      take: 5000,
+    });
+    const rows = entries.map((e) => ({
+      id: e.id,
+      recordedAt: e.recordedAt,
+      facilityId: e.dispenseLine.dispenseOrder.facilityId,
+      storeId: e.dispenseLine.dispenseOrder.storeId,
+      drugId: e.drugId,
+      hptCode: e.drug.hptCode,
+      genericName: e.drug.genericName,
+      strength: e.drug.strength,
+      dosageForm: e.drug.dosageForm,
+      unitOfIssue: e.drug.unitOfIssue,
+      schedule: e.drug.controlledSchedule,
+      patientId: e.patientId,
+      prescriptionRef: e.dispenseLine.dispenseOrder.prescription.externalId,
+      prescriberId: e.dispenseLine.dispenseOrder.prescription.prescriberId,
+      orderId: e.dispenseLine.dispenseOrder.id,
+      batchNumber: e.dispenseLine.batchNumber,
+      quantity: num(e.quantity) ?? 0,
+      quantityReturned: num(e.dispenseLine.quantityReturned) ?? 0,
+      dispensedBy: e.dispensedBy,
+      witnessedBy: e.witnessedBy,
+    }));
+    const totals = new Map<string, { drugId: string; hptCode: string; genericName: string; strength: string; unitOfIssue: string; schedule: string; entries: number; issued: number; returned: number }>();
+    for (const r of rows) {
+      const t = totals.get(r.drugId) ?? { drugId: r.drugId, hptCode: r.hptCode, genericName: r.genericName, strength: r.strength, unitOfIssue: r.unitOfIssue, schedule: r.schedule, entries: 0, issued: 0, returned: 0 };
+      t.entries += 1;
+      t.issued = round(t.issued + r.quantity, 3);
+      t.returned = round(t.returned + r.quantityReturned, 3);
+      totals.set(r.drugId, t);
+    }
+    return {
+      from: filter.from,
+      to: filter.to,
+      facilityId: filter.facilityId ?? null,
+      storeId: filter.storeId ?? null,
+      truncated: entries.length === 5000,
+      totals: [...totals.values()].map((t) => ({ ...t, net: round(t.issued - t.returned, 3) })).sort((a, b) => a.genericName.localeCompare(b.genericName)),
+      entries: rows,
+    };
+  }
+
   /** Override log for audit and formulary-compliance review. */
   overrides(filter: { from: Date; to: Date }) {
     return this.prisma.safetyAlert.findMany({
@@ -401,4 +466,15 @@ export function stockOutCsv(rows: { storeId: string; hptCode: string; genericNam
 export function prescribingCsv(rows: ({ prescriberId: string } & Record<string, number | string>)[]) {
   const headers = ['prescriberId', 'encounters', 'items', 'avgMedicinesPerEncounter', 'pctEncountersWithAntibiotic', 'pctEncountersWithInjection', 'pctItemsOnFormulary', 'pctEncountersWithAntimicrobial', 'overridesPer100Items'];
   return toCsv(headers, rows);
+}
+
+export function controlledRegisterCsv(rows: { recordedAt: Date; facilityId: string; storeId: string; hptCode: string; genericName: string; strength: string; schedule: string; patientId: string; prescriptionRef: string; prescriberId: string; batchNumber: string; quantity: number; quantityReturned: number; unitOfIssue: string; dispensedBy: string; witnessedBy: string }[]) {
+  return toCsv(
+    ['recorded_at', 'facility_id', 'store_id', 'hpt_code', 'generic_name', 'strength', 'schedule', 'patient_id', 'prescription_ref', 'prescriber_id', 'batch_number', 'quantity', 'quantity_returned', 'unit', 'dispensed_by', 'witnessed_by'],
+    rows.map((r) => ({
+      recorded_at: r.recordedAt.toISOString(), facility_id: r.facilityId, store_id: r.storeId, hpt_code: r.hptCode, generic_name: r.genericName, strength: r.strength,
+      schedule: r.schedule, patient_id: r.patientId, prescription_ref: r.prescriptionRef, prescriber_id: r.prescriberId, batch_number: r.batchNumber,
+      quantity: r.quantity, quantity_returned: r.quantityReturned, unit: r.unitOfIssue, dispensed_by: r.dispensedBy, witnessed_by: r.witnessedBy,
+    })),
+  );
 }

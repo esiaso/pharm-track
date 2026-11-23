@@ -7,8 +7,8 @@ import { api, ApiError, download, useApi } from '../../lib/api';
 import { date, dateTime, label } from '../../lib/format';
 import { useSession } from '../../lib/session';
 
-type Tab = 'returns' | 'stock-outs' | 'prescribing' | 'adrs';
-const TABS: [Tab, string][] = [['returns', 'Monthly returns'], ['stock-outs', 'Stock-outs'], ['prescribing', 'Prescribing'], ['adrs', 'ADRs to PPB']];
+type Tab = 'returns' | 'stock-outs' | 'prescribing' | 'controlled' | 'adrs';
+const TABS: [Tab, string][] = [['returns', 'Monthly returns'], ['stock-outs', 'Stock-outs'], ['prescribing', 'Prescribing'], ['controlled', 'Controlled drugs'], ['adrs', 'ADRs to PPB']];
 
 type Check = { level: 'warning' | 'info'; code: string; message: string; count: number };
 type Run = {
@@ -33,6 +33,12 @@ type Run = {
 type StockOut = { storeId: string; hptCode: string; genericName: string | null; strength: string | null; episodes: number; daysOut: number; outAtEnd: boolean; prescriptionItemsAffected: number; firstOutAt: string };
 type Indicators = { encounters: number; items: number; avgMedicinesPerEncounter: number; pctEncountersWithAntibiotic: number; pctEncountersWithInjection: number; pctItemsOnFormulary: number; pctEncountersWithAntimicrobial: number; overridesPer100Items: number };
 type Prescribing = { facility: Indicators; prescribers: ({ prescriberId: string } & Indicators)[] };
+type RegisterEntry = {
+  id: string; recordedAt: string; storeId: string; drugId: string; hptCode: string; genericName: string; strength: string; unitOfIssue: string; schedule: string;
+  patientId: string; prescriptionRef: string; prescriberId: string; orderId: string; batchNumber: string; quantity: number; quantityReturned: number; dispensedBy: string; witnessedBy: string;
+};
+type RegisterTotal = { drugId: string; hptCode: string; genericName: string; strength: string; unitOfIssue: string; schedule: string; entries: number; issued: number; returned: number; net: number };
+type Register = { entries: RegisterEntry[]; totals: RegisterTotal[]; truncated: boolean };
 type AdrRow = { id: string; patientId: string; seriousness: string; description: string; reportedAt: string; reportedBy: string; ppbReportStatus: string; dueBy: string; overdue: boolean; drug: { genericName: string; strength: string; hptCode: string } };
 type AdrQueue = { targets: { serious: number; nonSerious: number }; pending: AdrRow[]; counts: { pending: number; overdue: number; submitted: number; acknowledged: number } };
 
@@ -98,6 +104,7 @@ export default function ReportsPage() {
       {tab === 'returns' && <ReturnsTab />}
       {tab === 'stock-outs' && <StockOutsTab />}
       {tab === 'prescribing' && <PrescribingTab />}
+      {tab === 'controlled' && <ControlledTab />}
       {tab === 'adrs' && <AdrTab />}
     </section>
   );
@@ -339,6 +346,83 @@ function StockOutsTab() {
       </div>
       <ErrorBox error={error ?? dlError} />
       {data && <StockOutTable rows={data} />}
+    </div>
+  );
+}
+
+// ── Controlled-drug register ──────────────────────────────────────────────
+
+function ControlledTab() {
+  const { session } = useSession();
+  const range = useRange(30);
+  const [storeId, setStoreId] = useState('');
+  const [drugId, setDrugId] = useState('');
+  const base = `/reports/controlled-drugs?facilityId=${encodeURIComponent(session.facilityId)}&${range.query}${storeId ? `&storeId=${encodeURIComponent(storeId)}` : ''}`;
+  const path = `${base}${drugId ? `&drugId=${encodeURIComponent(drugId)}` : ''}`;
+  const { data, error } = useApi<Register>(path);
+  // Drug choices come from the unfiltered period, so picking one doesn't empty the list.
+  const all = useApi<Register>(base);
+  const [dlError, setDlError] = useState<string | null>(null);
+  return (
+    <div className="stack">
+      <p className="small muted">
+        Every controlled-drug dispense at {session.facilityId}, with who dispensed it and who witnessed it. Quantities are in each drug&apos;s unit of issue. Stock balances are kept in SupplyTrack. Opening this register is recorded in each patient&apos;s access log.
+      </p>
+      <div className="row">
+        {range.inputs}
+        <Field label="Store"><input value={storeId} onChange={(e) => setStoreId(e.target.value.trim())} placeholder="All stores" size={12} /></Field>
+        <Field label="Drug">
+          <select value={drugId} onChange={(e) => setDrugId(e.target.value)}>
+            <option value="">All controlled drugs</option>
+            {all.data?.totals.map((t) => <option key={t.drugId} value={t.drugId}>{t.genericName} {t.strength}</option>)}
+          </select>
+        </Field>
+        <button onClick={() => download(`${path}&format=csv`, 'controlled-drug-register.csv').catch((e) => setDlError((e as Error).message))}>Download CSV</button>
+      </div>
+      <ErrorBox error={error ?? dlError} />
+      {data && data.truncated && <p className="small">Only the first 5,000 entries are shown. Choose a shorter period or one drug.</p>}
+      {data && (data.entries.length === 0 ? <Empty>No controlled drugs were dispensed in this period.</Empty> : (
+        <>
+          <div className="table-wrap">
+            <table aria-label="Totals by drug">
+              <thead><tr><th>Drug</th><th>Schedule</th><th className="right">Entries</th><th className="right">Issued</th><th className="right">Returned</th><th className="right">Net</th></tr></thead>
+              <tbody>
+                {data.totals.map((t) => (
+                  <tr key={t.drugId}>
+                    <td><strong>{t.genericName}</strong> {t.strength}<div className="small muted mono">{t.hptCode}</div></td>
+                    <td><Badge value={t.schedule} /></td>
+                    <td className="right">{t.entries}</td>
+                    <td className="right">{t.issued} {label(t.unitOfIssue).toLowerCase()}</td>
+                    <td className="right">{t.returned}</td>
+                    <td className="right"><strong>{t.net}</strong></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="table-wrap">
+            <table aria-label="Register entries">
+              <thead><tr><th>Date</th><th>Drug</th><th>Patient</th><th>Prescription</th><th>Batch</th><th className="right">Qty</th><th className="right">Returned</th><th>Dispensed by</th><th>Witness</th><th>Store</th></tr></thead>
+              <tbody>
+                {data.entries.map((e) => (
+                  <tr key={e.id}>
+                    <td>{dateTime(e.recordedAt)}</td>
+                    <td>{e.genericName} {e.strength}</td>
+                    <td><Link href={`/patients/${encodeURIComponent(e.patientId)}`}>{e.patientId}</Link></td>
+                    <td><Link href={`/dispensing/${encodeURIComponent(e.orderId)}`} className="mono">{e.prescriptionRef}</Link><div className="small muted">{e.prescriberId}</div></td>
+                    <td className="mono">{e.batchNumber}</td>
+                    <td className="right">{e.quantity}</td>
+                    <td className="right">{e.quantityReturned || ''}</td>
+                    <td>{e.dispensedBy}</td>
+                    <td>{e.witnessedBy}</td>
+                    <td className="mono">{e.storeId}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      ))}
     </div>
   );
 }
