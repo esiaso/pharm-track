@@ -2,158 +2,153 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { ReactNode, useEffect, useRef, useState } from 'react';
+import { ComponentType, ReactNode, SVGProps, useEffect, useRef, useState } from 'react';
 import { hasRole, ROLES, useSession } from '../lib/session';
-import { THEME_KEY } from '../lib/theme';
-import { Icon, IconName } from './icons';
+import {
+  IconBook, IconChart, IconChevronDown, IconClose, IconFlask, IconHome, IconMenu, IconMoon, IconPanel, IconPill,
+  IconPlug, IconRepeat, IconSearch, IconShield, IconSun, IconUsers, Logo,
+} from './Icons';
 
-type NavItem = { href: string; label: string; icon: IconName; roles?: string[]; hint: string };
+type NavItem = { href: string; label: string; icon: ComponentType<SVGProps<SVGSVGElement>>; roles?: string[] };
 
-const GROUPS: { title: string; items: NavItem[] }[] = [
+const NAV: { title: string; items: NavItem[] }[] = [
   {
-    title: 'Pharmacy',
+    title: 'Main menu',
     items: [
-      { href: '/', label: 'Overview', icon: 'home', hint: 'Start page' },
-      { href: '/dispensing', label: 'Dispensing', icon: 'pill', hint: 'Queue, verification, labels, returns' },
-      { href: '/refills', label: 'Refills', icon: 'refresh', hint: 'Due and overdue refills, SMS' },
-      { href: '/patients', label: 'Patients', icon: 'users', hint: 'Allergies, history, ADRs' },
-      { href: '/formulary', label: 'Formulary', icon: 'book', hint: 'Drugs, codes, prices' },
+      { href: '/', label: 'Overview', icon: IconHome },
+      { href: '/dispensing', label: 'Dispensing', icon: IconPill },
+      { href: '/refills', label: 'Refills', icon: IconRepeat },
+      { href: '/patients', label: 'Patients', icon: IconUsers },
+      { href: '/formulary', label: 'Formulary', icon: IconBook },
     ],
   },
   {
     title: 'Management',
     items: [
-      { href: '/reports', label: 'Reports', icon: 'chart', roles: ['PHARMACIST'], hint: 'Registers, returns, stock' },
-      { href: '/content', label: 'Clinical content', icon: 'shield', roles: ['PHARMACIST'], hint: 'Code lists and rule sets' },
-      { href: '/integrations', label: 'Integrations', icon: 'plug', roles: ['PHARMACIST'], hint: 'CliniTrack and SupplyTrack outbox' },
-      { href: '/privacy', label: 'Data protection', icon: 'lock', roles: ['ADMINISTRATOR'], hint: 'Access log, export, retention' },
+      { href: '/reports', label: 'Reports', icon: IconChart, roles: ['PHARMACIST'] },
+      { href: '/content', label: 'Clinical content', icon: IconFlask, roles: ['PHARMACIST'] },
+      { href: '/integrations', label: 'Integrations', icon: IconPlug, roles: ['PHARMACIST'] },
+      { href: '/privacy', label: 'Data protection', icon: IconShield, roles: ['ADMINISTRATOR'] },
     ],
   },
 ];
 
-const ALL = GROUPS.flatMap((g) => g.items);
-const isActive = (path: string | null, href: string) => (href === '/' ? path === '/' : !!path?.startsWith(href));
 const roleLabel = (r: string) => r.toLowerCase().replace(/_/g, ' ');
+const isActive = (path: string | null, href: string) => (href === '/' ? path === '/' : !!path?.startsWith(href));
 
-/** Sidebar, top bar and page area. */
+/** Sidebar, top bar and the rounded content panel around every page. */
 export function AppShell({ children }: { children: ReactNode }) {
   const path = usePathname();
-  const { session, status } = useSession();
-  const [navOpen, setNavOpen] = useState(false);
-  useEffect(() => setNavOpen(false), [path]);
-  const ready = status === 'ready';
-  const visible = (n: NavItem) => !n.roles || hasRole(session, ...n.roles);
-  const current = ALL.find((n) => n.href !== '/' && isActive(path, n.href));
-
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
+  useEffect(() => setMenuOpen(false), [path]);
   return (
-    <div className="shell">
-      <aside className={`sidebar no-print${navOpen ? ' open' : ''}`} aria-label="Main menu">
-        <div className="sidebar-head">
-          <Link href="/" className="brand">
-            <span className="brand-mark"><Icon name="pill" size={18} /></span>
-            PharmTrack
-          </Link>
-          <button className="icon-btn sidebar-close" onClick={() => setNavOpen(false)} aria-label="Close menu"><Icon name="close" /></button>
-        </div>
-        {ready && (
-          <nav>
-            {GROUPS.map((g) => {
-              const items = g.items.filter(visible);
-              if (!items.length) return null;
-              return (
-                <div key={g.title} className="nav-group">
-                  <p className="nav-title">{g.title}</p>
-                  {items.map((n) => (
-                    <Link key={n.href} href={n.href} className={`nav-link${isActive(path, n.href) ? ' active' : ''}`} aria-current={isActive(path, n.href) ? 'page' : undefined}>
-                      <Icon name={n.icon} />
-                      <span>{n.label}</span>
-                    </Link>
-                  ))}
-                </div>
-              );
-            })}
-          </nav>
-        )}
-        <p className="sidebar-foot small muted">SynergyOne pharmacy module</p>
-      </aside>
-      {navOpen && <div className="scrim no-print" onClick={() => setNavOpen(false)} />}
-
-      <div className="shell-main">
-        <header className="topbar no-print">
-          <button className="icon-btn menu-btn" onClick={() => setNavOpen(true)} aria-label="Open menu"><Icon name="menu" /></button>
-          <div className="crumb">
-            <strong>{current?.label ?? (path === '/' ? 'Overview' : 'PharmTrack')}</strong>
-            <span className="small muted">PharmTrack{current ? ` / ${current.label}` : ''}</span>
-          </div>
-          {ready && <PageSearch items={ALL.filter(visible)} />}
-          <ThemeToggle />
-          {ready && <UserMenu />}
-        </header>
-        <main>{children}</main>
+    <div className={`shell${collapsed ? ' collapsed' : ''}`}>
+      <Sidebar open={menuOpen} onClose={() => setMenuOpen(false)} onCollapse={() => setCollapsed(!collapsed)} />
+      {menuOpen && <div className="scrim" onClick={() => setMenuOpen(false)} />}
+      <div className="panel">
+        <Topbar onMenu={() => setMenuOpen(true)} onExpand={collapsed ? () => setCollapsed(false) : undefined} />
+        <main className="content">
+          <SessionGate>{children}</SessionGate>
+        </main>
       </div>
     </div>
   );
 }
 
-/** Jumps to a screen. Ctrl+K or Cmd+K focuses it. */
-function PageSearch({ items }: { items: NavItem[] }) {
+function useNav() {
+  const { session, status } = useSession();
+  if (status !== 'ready') return [];
+  return NAV.map((g) => ({ ...g, items: g.items.filter((n) => !n.roles || hasRole(session, ...n.roles)) })).filter((g) => g.items.length);
+}
+
+function Sidebar({ open, onClose, onCollapse }: { open: boolean; onClose: () => void; onCollapse: () => void }) {
+  const path = usePathname();
+  const groups = useNav();
+  const { session, status } = useSession();
+  return (
+    <aside className={`sidebar${open ? ' open' : ''}`} aria-label="Main navigation">
+      <div className="sidebar-head">
+        <Link href="/" className="brand"><Logo size={30} /><span>Pharm<b>Track</b></span></Link>
+        <button className="icon-btn ghost hide-mobile" onClick={onCollapse} aria-label="Collapse sidebar"><IconPanel /></button>
+        <button className="icon-btn ghost show-mobile" onClick={onClose} aria-label="Close menu"><IconClose /></button>
+      </div>
+      <nav className="sidebar-nav">
+        {groups.map((g) => (
+          <div key={g.title} className="nav-group">
+            <p className="nav-title">{g.title}</p>
+            <ul>
+              {g.items.map((n) => (
+                <li key={n.href}>
+                  <Link href={n.href} className={`nav-item${isActive(path, n.href) ? ' active' : ''}`} aria-current={isActive(path, n.href) ? 'page' : undefined}>
+                    <n.icon /><span>{n.label}</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </nav>
+      {status === 'ready' && (
+        <div className="sidebar-foot">
+          <p className="nav-title">Working in</p>
+          <p className="foot-store"><strong>{session.storeId}</strong><span>Facility {session.facilityId}</span></p>
+        </div>
+      )}
+    </aside>
+  );
+}
+
+function Topbar({ onMenu, onExpand }: { onMenu: () => void; onExpand?: () => void }) {
+  return (
+    <header className="topbar">
+      <button className="icon-btn ghost show-mobile" onClick={onMenu} aria-label="Open menu"><IconMenu /></button>
+      {onExpand && <button className="icon-btn ghost hide-mobile" onClick={onExpand} aria-label="Expand sidebar"><IconPanel /></button>}
+      <Link href="/" className="brand show-mobile"><Logo size={26} /></Link>
+      <PageSearch />
+      <span className="spacer" />
+      <ThemeToggle />
+      <UserMenu />
+    </header>
+  );
+}
+
+/** Jump to a page by name; Ctrl/⌘ K focuses it. */
+function PageSearch() {
   const router = useRouter();
+  const groups = useNav();
   const [q, setQ] = useState('');
   const [focus, setFocus] = useState(false);
-  const [sel, setSel] = useState(0);
   const ref = useRef<HTMLInputElement>(null);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        ref.current?.focus();
-      }
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); ref.current?.focus(); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
-  const term = q.trim().toLowerCase();
-  const hits = term ? items.filter((n) => `${n.label} ${n.hint}`.toLowerCase().includes(term)) : items;
-  const go = (n: NavItem) => {
-    setQ('');
-    ref.current?.blur();
-    router.push(n.href);
-  };
+  const items = groups.flatMap((g) => g.items).filter((n) => n.label.toLowerCase().includes(q.trim().toLowerCase()));
+  const go = (href: string) => { setQ(''); ref.current?.blur(); router.push(href); };
   return (
-    <div className="search">
-      <Icon name="search" size={18} />
-      <input
-        ref={ref}
-        value={q}
-        placeholder="Search screens"
-        aria-label="Search screens"
-        onChange={(e) => { setQ(e.target.value); setSel(0); }}
-        onFocus={() => setFocus(true)}
-        onBlur={() => setTimeout(() => setFocus(false), 150)}
-        onKeyDown={(e) => {
-          if (e.key === 'ArrowDown') { e.preventDefault(); setSel((s) => Math.min(s + 1, hits.length - 1)); }
-          if (e.key === 'ArrowUp') { e.preventDefault(); setSel((s) => Math.max(s - 1, 0)); }
-          if (e.key === 'Enter' && hits[sel]) go(hits[sel]);
-          if (e.key === 'Escape') ref.current?.blur();
-        }}
-      />
-      <kbd>⌘K</kbd>
-      {focus && (
-        <ul className="search-results card" role="listbox">
-          {hits.length ? hits.map((n, i) => (
-            <li key={n.href} role="option" aria-selected={i === sel} onMouseDown={() => go(n)}>
-              <Icon name={n.icon} size={18} />
-              <span><strong>{n.label}</strong><span className="small muted">{n.hint}</span></span>
-            </li>
-          )) : <li className="muted">No matching screen</li>}
+    <form className="search" role="search" onSubmit={(e) => { e.preventDefault(); if (items[0]) go(items[0].href); }}>
+      <IconSearch />
+      <input ref={ref} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search pages…" aria-label="Search pages"
+        onFocus={() => setFocus(true)} onBlur={() => setTimeout(() => setFocus(false), 150)} />
+      <kbd>⌘ K</kbd>
+      {focus && q && (
+        <ul className="search-results card">
+          {items.length === 0 && <li className="muted small">No page called “{q}”.</li>}
+          {items.map((n) => (
+            <li key={n.href}><button type="button" onMouseDown={() => go(n.href)}><n.icon />{n.label}</button></li>
+          ))}
         </ul>
       )}
-    </div>
+    </form>
   );
 }
 
 function ThemeToggle() {
-  const [dark, setDark] = useState<boolean | null>(null);
+  const [dark, setDark] = useState(false);
   useEffect(() => {
     const t = document.documentElement.dataset.theme;
     setDark(t ? t === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches);
@@ -161,36 +156,34 @@ function ThemeToggle() {
   const toggle = () => {
     const next = dark ? 'light' : 'dark';
     document.documentElement.dataset.theme = next;
-    try { localStorage.setItem(THEME_KEY, next); } catch { /* storage unavailable */ }
+    try { localStorage.setItem('pt-theme', next); } catch { /* private mode */ }
     setDark(!dark);
   };
   return (
-    <button className="icon-btn" onClick={toggle} aria-label={dark ? 'Use light theme' : 'Use dark theme'} title={dark ? 'Light theme' : 'Dark theme'}>
-      <Icon name={dark ? 'sun' : 'moon'} />
+    <button className="icon-btn" onClick={toggle} aria-label={dark ? 'Switch to light theme' : 'Switch to dark theme'}>
+      {dark ? <IconSun /> : <IconMoon />}
     </button>
   );
 }
 
 function UserMenu() {
-  const { session, setSession, signOut } = useSession();
+  const { session, setSession, status, signOut } = useSession();
   const [open, setOpen] = useState(false);
-  const wrap = useRef<HTMLDivElement>(null);
+  const box = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;
-    const onDown = (e: MouseEvent) => { if (!wrap.current?.contains(e.target as Node)) setOpen(false); };
-    document.addEventListener('mousedown', onDown);
-    return () => document.removeEventListener('mousedown', onDown);
+    const close = (e: MouseEvent) => { if (!box.current?.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
   }, [open]);
-  const initials = session.userId.replace(/[^A-Za-z0-9]/g, ' ').trim().split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase() || '?';
+  if (status !== 'ready') return null;
+  const initials = session.userId.replace(/[^a-z0-9]/gi, ' ').trim().split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase() || '?';
   return (
-    <div className="user" ref={wrap}>
-      <button className="user-btn" onClick={() => setOpen(!open)} aria-expanded={open}>
+    <div className="user" ref={box}>
+      <button className="user-btn" onClick={() => setOpen(!open)} aria-expanded={open} aria-haspopup="dialog">
         <span className="avatar">{initials}</span>
-        <span className="user-text">
-          <strong>{session.userId}</strong>
-          <span className="small muted">{roleLabel(session.role)} · {session.storeId}</span>
-        </span>
-        <Icon name="chevron" size={16} />
+        <span className="user-text hide-mobile"><strong>{session.userId}</strong><span>{roleLabel(session.role)}</span></span>
+        <IconChevronDown className="hide-mobile" />
       </button>
       {open && (
         <form
@@ -208,6 +201,10 @@ function UserMenu() {
             setOpen(false);
           }}
         >
+          <div className="session-head">
+            <span className="avatar lg">{initials}</span>
+            <div><strong>{session.userId}</strong><p className="muted small">{roleLabel(session.role)} · {session.storeId}</p></div>
+          </div>
           {session.sso ? (
             <p className="small">Signed in through SynergyOne as <strong>{session.userId}</strong> ({session.roles.map(roleLabel).join(', ') || 'no PharmTrack role'}).</p>
           ) : (
@@ -242,9 +239,10 @@ export function SessionGate({ children }: { children: ReactNode }) {
   if (status === 'loading') return <p className="muted">Loading…</p>;
   if (status === 'signed-out')
     return (
-      <section className="card stack" style={{ maxWidth: 420, margin: '48px auto' }}>
-        <h1 style={{ margin: 0 }}>Sign in to PharmTrack</h1>
-        <p className="muted" style={{ margin: 0 }}>Use your SynergyOne account.</p>
+      <section className="card stack signin">
+        <Logo size={40} />
+        <h1>Sign in to PharmTrack</h1>
+        <p className="muted">Use your SynergyOne account.</p>
         <button className="primary" onClick={signIn}>Sign in with SynergyOne</button>
       </section>
     );
