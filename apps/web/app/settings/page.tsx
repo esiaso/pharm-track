@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Badge, ErrorBox, Field } from '../../components/ui';
+import { ErrorBox, Field } from '../../components/ui';
 import { api, useApi } from '../../lib/api';
 import { dateTime } from '../../lib/format';
 import { hasRole, useSession } from '../../lib/session';
@@ -37,7 +37,13 @@ function preview(body: string, facility: { name?: string; phone?: string | null 
     facilityName: facility.name || 'the pharmacy',
     facilityPhone: facility.phone || '',
   };
-  return body.replace(/\{\{\s*(\w+)\s*\}\}/g, (_, k: string) => vars[k] ?? `{{${k}}}`).replace(/\s+,/g, ',').replace(/\s{2,}/g, ' ').trim();
+  // Same clean-up as the API (tidySms): a label left empty, such as "Enquiries: ." without a phone, is dropped.
+  return body
+    .replace(/\{\{\s*(\w+)\s*\}\}/g, (_, k: string) => vars[k] ?? `{{${k}}}`)
+    .replace(/\s*[A-Za-z][\w ]{0,30}:\s*(?:[.!?]|$)/g, '')
+    .replace(/\s+,/g, ',')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
 }
 
 /** SMS parts: 160 characters in one message, 153 per part after that (GSM 7-bit). */
@@ -96,7 +102,7 @@ function ProfileCard({ fid, profile, error, admin, onSaved }: { fid: string; pro
       <div className="row" style={{ alignItems: 'baseline' }}>
         <h3>Facility profile</h3>
         <span className="spacer" />
-        {profile ? <span className="small muted">Updated {dateTime(profile.updatedAt)}</span> : <Badge value="DRAFT" />}
+        {profile ? <span className="small muted">Updated {dateTime(profile.updatedAt)}</span> : <span className="badge warn">Not set</span>}
       </div>
       {!profile && !error && <p className="small muted">Not set yet. Labels and SMS say &ldquo;the pharmacy&rdquo; until a name is saved.</p>}
       <ErrorBox error={error ?? err} />

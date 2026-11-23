@@ -49,6 +49,18 @@ export function unknownPlaceholders(body: string): string[] {
   return [...new Set(found.filter((k) => !(PLACEHOLDERS as readonly string[]).includes(k)))];
 }
 
+/**
+ * Cleans a rendered message: drops a label left with nothing after it (for
+ * example "Enquiries: ." when the facility has no phone yet), and stray spaces.
+ */
+export function tidySms(text: string): string {
+  return text
+    .replace(/\s*[A-Za-z][\w ]{0,30}:\s*(?:[.!?]|$)/g, '')
+    .replace(/\s+,/g, ',')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
 export function renderTemplate(body: string, vars: Record<string, string | undefined>): string {
   return body.replace(/\{\{\s*(\w+)\s*\}\}/g, (_, k: string) => vars[k] ?? '');
 }

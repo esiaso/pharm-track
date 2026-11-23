@@ -1,7 +1,7 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, ParseEnumPipe, Post, Put, Query } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { NotificationPurpose, RefillStatus } from '@prisma/client';
-import { Actor, CurrentActor, Role, Roles } from '../common/auth';
+import { Actor, CurrentActor, Role, Roles, Webhook } from '../common/auth';
 import { PatientData } from '../common/patient-access';
 import { NotificationsService } from './notifications.service';
 import { ContactPreferenceDto, DeliveryReportDto, FacilityProfileDto, RequestRefillDto, SmsTemplateDto } from './refills.dto';
@@ -108,6 +108,18 @@ export class RefillsController {
   @Roles(Role.ADMINISTRATOR)
   template(@Body() dto: SmsTemplateDto, @CurrentActor() actor: Actor) {
     return this.notifications.upsertTemplate(dto, actor);
+  }
+
+  /**
+   * Delivery reports from Africa's Talking. Set the callback URL in its
+   * dashboard to …/api/v1/notifications/sms/africastalking/delivery-reports?token=<SMS_WEBHOOK_SECRET>.
+   * The body is form-encoded and has more fields than we read, so it is not validated as a DTO.
+   */
+  @Post('notifications/sms/africastalking/delivery-reports')
+  @HttpCode(200)
+  @Webhook('africastalking')
+  africasTalkingReport(@Body() body: Record<string, unknown>) {
+    return this.notifications.africasTalkingReport(body ?? {});
   }
 
   /** Delivery-report webhook for the SMS gateway. */

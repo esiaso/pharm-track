@@ -1,5 +1,5 @@
 import { daysOfSupply, isEarlyRefill, proportionOfDaysCovered, refillStatus, reminderToSend, scheduleAfterFill } from './refills';
-import { DEFAULT_TEMPLATES, normaliseKenyanMobile, PRIVATE_TEMPLATES, renderTemplate, unknownPlaceholders } from './sms';
+import { DEFAULT_TEMPLATES, normaliseKenyanMobile, PRIVATE_TEMPLATES, renderTemplate, tidySms, unknownPlaceholders } from './sms';
 
 const d = (s: string) => new Date(`${s}T00:00:00Z`);
 
@@ -61,6 +61,11 @@ describe('refill schedule', () => {
 describe('sms helpers', () => {
   it('renders templates', () => {
     expect(renderTemplate('Hi {{ name }}, {{x}}', { name: 'Amina' })).toBe('Hi Amina, ');
+  });
+  it('drops a label left empty, such as a missing phone', () => {
+    expect(tidySms('Please visit Riverside Clinic to collect it. Enquiries: .')).toBe('Please visit Riverside Clinic to collect it.');
+    expect(tidySms('Tafadhali fika Riverside. Maswali: .')).toBe('Tafadhali fika Riverside.');
+    expect(tidySms('Hello , come at 10:30. Enquiries: 0711 000 111.')).toBe('Hello, come at 10:30. Enquiries: 0711 000 111.');
   });
   it('finds placeholders that are not supported', () => {
     expect(unknownPlaceholders('Hi {{patientFirstName}}, {{ drugname }} at {{facilityName}} {{x}} {{x}}')).toEqual(['drugname', 'x']);

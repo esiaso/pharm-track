@@ -3,7 +3,8 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { NotificationPurpose } from '@prisma/client';
 import { Actor } from '../common/auth';
 import { AuditService } from '../common/audit.service';
-import { DEFAULT_TEMPLATES, normaliseKenyanMobile, PLACEHOLDERS, PRIVATE_TEMPLATES, renderTemplate, unknownPlaceholders } from '../domain/sms';
+import { atDeliveryStatus } from '../domain/africastalking';
+import { DEFAULT_TEMPLATES, normaliseKenyanMobile, PLACEHOLDERS, PRIVATE_TEMPLATES, renderTemplate, tidySms, unknownPlaceholders } from '../domain/sms';
 import { backoffMs } from '../integrations/outbox.service';
 import { SmsProvider } from '../integrations/sms.provider';
 import { PrismaService } from '../prisma/prisma.service';
@@ -50,10 +51,8 @@ export class NotificationsService {
       facilityName: facility?.name ?? 'the pharmacy',
       facilityPhone: facility?.phone ?? '',
       ...req.vars,
-    })
-      .replace(/\s+,/g, ',')
-      .replace(/\s{2,}/g, ' ')
-      .trim();
+    });
+    const text = tidySms(body);
     const consented = !!pref?.smsOptIn && !!pref.phoneE164;
     return this.prisma.notification.create({
       data: {
@@ -62,7 +61,7 @@ export class NotificationsService {
         dispenseOrderId: req.dispenseOrderId,
         purpose: req.purpose,
         toAddress: consented ? pref!.phoneE164 : null,
-        body,
+        body: text,
         dedupeKey: req.dedupeKey,
         status: consented ? 'QUEUED' : 'SKIPPED_NO_CONSENT',
       },
@@ -103,13 +102,15 @@ export class NotificationsService {
           });
         } catch (e) {
           const attempts = n.attempts + 1;
-          this.logger.warn(`SMS ${n.id} attempt ${attempts} failed: ${(e as Error).message}`);
+          // A refusal that cannot change on retry (bad number, blacklisted, sender id not approved) fails now.
+          const permanent = (e as { retryable?: boolean }).retryable === false;
+          this.logger.warn(`SMS ${n.id} attempt ${attempts} failed${permanent ? ' permanently' : ''}: ${(e as Error).message}`);
           await this.prisma.notification.update({
             where: { id: n.id },
             data: {
               attempts,
               lastError: (e as Error).message.slice(0, 500),
-              status: attempts >= MAX_SMS_ATTEMPTS ? 'FAILED' : 'QUEUED',
+              status: permanent || attempts >= MAX_SMS_ATTEMPTS ? 'FAILED' : 'QUEUED',
               scheduledFor: new Date(Date.now() + backoffMs(attempts)),
             },
           });
@@ -122,6 +123,15 @@ export class NotificationsService {
   }
 
   /** Delivery report callback from the SMS gateway. */
+  /** Africa's Talking delivery report (form fields id, status, failureReason). */
+  async africasTalkingReport(body: Record<string, unknown>) {
+    const id = typeof body.id === 'string' ? body.id : '';
+    const status = atDeliveryStatus(typeof body.status === 'string' ? body.status : undefined);
+    if (!id || !status) return { updated: false };
+    const reason = typeof body.failureReason === 'string' && body.failureReason ? body.failureReason : String(body.status);
+    return this.deliveryReport({ providerMessageId: id, status, error: status === 'FAILED' ? `Africa's Talking: ${reason}` : undefined });
+  }
+
   async deliveryReport(dto: DeliveryReportDto) {
     const n = await this.prisma.notification.findFirst({ where: { providerMessageId: dto.providerMessageId } });
     if (!n) return { updated: false };
