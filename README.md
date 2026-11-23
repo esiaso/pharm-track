@@ -80,3 +80,14 @@ npm run openapi -w apps/api                   # regenerate docs/api/openapi.json
 
 The end-to-end suite truncates every table in `E2E_DATABASE_URL` (after applying
 migrations there with `prisma migrate deploy`), so use a throwaway database.
+
+Browser tests (Playwright, in `e2e/`) drive the web app: every screen, the
+dispensing flow from a CliniTrack prescription to Zebra labels, settings, roles,
+search, dark mode and the phone layout. They start the stubs, the built API and
+the built web app on ports 4000, 5000, 3000 and 3001, and reset the database too:
+
+```bash
+npm run build -w apps/api && npm run build -w apps/web
+npx playwright install chromium               # once
+E2E_DATABASE_URL=postgresql://… npm run test:browser
+```
