@@ -4,7 +4,7 @@ import type { Request, Response } from 'express';
 import { Actor, CurrentActor, Role, Roles } from '../common/auth';
 import { PatientData } from '../common/patient-access';
 import { AdrBatchDto, ControlledRegisterQuery, GenerateReportDto, ListRunsQuery, PeriodQuery, StockOutQuery, SubmitReportDto } from './reports.dto';
-import { consumptionCsv, controlledRegisterCsv, prescribingCsv, ReportsService, stockOutCsv } from './reports.service';
+import { adherenceCsv, consumptionCsv, controlledRegisterCsv, prescribingCsv, ReportsService, stockOutCsv } from './reports.service';
 
 function period(from?: string, to?: string) {
   const end = to ? new Date(to) : new Date();
@@ -55,6 +55,17 @@ export class ReportsController {
   @Get('stock-outs')
   async stockOuts(@Query() q: StockOutQuery, @Res({ passthrough: true }) res: Response) {
     return maybeCsv(res, q.format, 'stock-outs.csv', await this.service.stockOuts({ facilityId: q.facilityId, storeId: q.storeId, ...period(q.from, q.to) }), stockOutCsv);
+  }
+
+  /** Refill adherence per patient item (PDC, late refills). Defaults to the last 90 days. Names patients, so access is logged. */
+  @Get('adherence')
+  @PatientData('reports.adherence')
+  async adherence(@Query() q: PeriodQuery, @Req() req: Request & { patientAccess?: string[] }, @Res({ passthrough: true }) res: Response) {
+    const to = q.to ? new Date(q.to) : new Date();
+    const from = q.from ? new Date(q.from) : new Date(to.getTime() - 90 * 86_400_000);
+    const r = await this.service.adherence({ facilityId: q.facilityId, from, to });
+    req.patientAccess = r.rows.map((x) => x.patientId);
+    return maybeCsv(res, q.format, 'refill-adherence.csv', r, (b) => adherenceCsv(b.rows));
   }
 
   /** Controlled-drug register with dual sign-off. Names patients, so access is logged. */

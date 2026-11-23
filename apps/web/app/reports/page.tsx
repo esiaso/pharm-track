@@ -7,8 +7,8 @@ import { api, ApiError, download, useApi } from '../../lib/api';
 import { date, dateTime, label } from '../../lib/format';
 import { useSession } from '../../lib/session';
 
-type Tab = 'returns' | 'stock-outs' | 'prescribing' | 'controlled' | 'adrs';
-const TABS: [Tab, string][] = [['returns', 'Monthly returns'], ['stock-outs', 'Stock-outs'], ['prescribing', 'Prescribing'], ['controlled', 'Controlled drugs'], ['adrs', 'ADRs to PPB']];
+type Tab = 'returns' | 'stock-outs' | 'prescribing' | 'adherence' | 'controlled' | 'adrs';
+const TABS: [Tab, string][] = [['returns', 'Monthly returns'], ['stock-outs', 'Stock-outs'], ['prescribing', 'Prescribing'], ['adherence', 'Adherence'], ['controlled', 'Controlled drugs'], ['adrs', 'ADRs to PPB']];
 
 type Check = { level: 'warning' | 'info'; code: string; message: string; count: number };
 type Run = {
@@ -33,6 +33,8 @@ type Run = {
 type StockOut = { storeId: string; hptCode: string; genericName: string | null; strength: string | null; episodes: number; daysOut: number; outAtEnd: boolean; prescriptionItemsAffected: number; firstOutAt: string };
 type Indicators = { encounters: number; items: number; avgMedicinesPerEncounter: number; pctEncountersWithAntibiotic: number; pctEncountersWithInjection: number; pctItemsOnFormulary: number; pctEncountersWithAntimicrobial: number; overridesPer100Items: number };
 type Prescribing = { facility: Indicators; prescribers: ({ prescriberId: string } & Indicators)[] };
+type AdherenceRow = { scheduleId: string; patientId: string; hptCode: string; genericName: string; strength: string; fills: number; daysOfSupplyPerFill: number; observedDays: number; pdc: number; adherent: boolean; lateRefills: number; averageDaysLate: number; status: string };
+type AdherenceReport = { threshold: number; summary: { items: number; patients: number; medianPdc: number | null; pctAdherent: number; lateRefills: number; overdueNow: number }; rows: AdherenceRow[] };
 type RegisterEntry = {
   id: string; recordedAt: string; storeId: string; drugId: string; hptCode: string; genericName: string; strength: string; unitOfIssue: string; schedule: string;
   patientId: string; prescriptionRef: string; prescriberId: string; orderId: string; batchNumber: string; quantity: number; quantityReturned: number; dispensedBy: string; witnessedBy: string;
@@ -104,6 +106,7 @@ export default function ReportsPage() {
       {tab === 'returns' && <ReturnsTab />}
       {tab === 'stock-outs' && <StockOutsTab />}
       {tab === 'prescribing' && <PrescribingTab />}
+      {tab === 'adherence' && <AdherenceTab />}
       {tab === 'controlled' && <ControlledTab />}
       {tab === 'adrs' && <AdrTab />}
     </section>
@@ -346,6 +349,67 @@ function StockOutsTab() {
       </div>
       <ErrorBox error={error ?? dlError} />
       {data && <StockOutTable rows={data} />}
+    </div>
+  );
+}
+
+// ── Refill adherence ──────────────────────────────────────────────────────
+
+const pct = (v: number | null) => (v === null ? '–' : `${Math.round(v * 1000) / 10}%`);
+
+function AdherenceTab() {
+  const { session } = useSession();
+  const range = useRange(90);
+  const [onlyBelow, setOnlyBelow] = useState(false);
+  const path = `/reports/adherence?facilityId=${encodeURIComponent(session.facilityId)}&${range.query}`;
+  const { data, error } = useApi<AdherenceReport>(path);
+  const [dlError, setDlError] = useState<string | null>(null);
+  const rows = data ? (onlyBelow ? data.rows.filter((r) => !r.adherent) : data.rows) : [];
+  return (
+    <div className="stack">
+      <p className="small muted">
+        Refill timeliness for medicines with refills at {session.facilityId}. Days covered (PDC) is the share of days in the period the patient had supply, counted from the first fill and stopping when the course ends. {data ? pct(data.threshold) : '80%'} or more counts as adherent. A late refill is one collected after the grace days.
+      </p>
+      <div className="row">
+        {range.inputs}
+        <label className="row small" style={{ alignItems: 'center' }}><input type="checkbox" checked={onlyBelow} onChange={(e) => setOnlyBelow(e.target.checked)} /> Only below {data ? pct(data.threshold) : '80%'}</label>
+        <button onClick={() => download(`${path}&format=csv`, 'refill-adherence.csv').catch((e) => setDlError((e as Error).message))}>Download CSV</button>
+      </div>
+      <ErrorBox error={error ?? dlError} />
+      {data && (
+        <>
+          <div className="card">
+            <div className="stats">
+              <span><strong>{data.summary.patients}</strong> patients</span>
+              <span><strong>{data.summary.items}</strong> medicines on refill</span>
+              <span><strong>{pct(data.summary.medianPdc)}</strong> median days covered</span>
+              <span><strong>{data.summary.pctAdherent}%</strong> adherent</span>
+              <span><strong>{data.summary.lateRefills}</strong> late refills</span>
+              <span><strong>{data.summary.overdueNow}</strong> overdue now</span>
+            </div>
+          </div>
+          {rows.length === 0 ? <Empty>{onlyBelow ? 'Every patient is at or above the threshold.' : 'No refills were collected in this period.'}</Empty> : (
+            <div className="table-wrap">
+              <table aria-label="Adherence by patient">
+                <thead><tr><th>Patient</th><th>Medicine</th><th className="right">Fills</th><th className="right">Days covered</th><th className="right">Late refills</th><th className="right">Avg days late</th><th>Status</th></tr></thead>
+                <tbody>
+                  {rows.map((r) => (
+                    <tr key={r.scheduleId}>
+                      <td><Link href={`/patients/${encodeURIComponent(r.patientId)}`}>{r.patientId}</Link></td>
+                      <td><Link href={`/refills/${encodeURIComponent(r.scheduleId)}`}>{r.genericName} {r.strength}</Link></td>
+                      <td className="right">{r.fills}</td>
+                      <td className="right"><strong>{pct(r.pdc)}</strong> {!r.adherent && <Badge value="BELOW_THRESHOLD" />}</td>
+                      <td className="right">{r.lateRefills}</td>
+                      <td className="right">{r.fills > 1 ? r.averageDaysLate.toFixed(1) : '–'}</td>
+                      <td><Badge value={r.status} /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }

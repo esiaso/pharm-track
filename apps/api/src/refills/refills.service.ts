@@ -3,7 +3,7 @@ import { Cron } from '@nestjs/schedule';
 import { Drug, PrescriptionItem, RefillSchedule, RefillStatus } from '@prisma/client';
 import { Actor } from '../common/auth';
 import { AuditService } from '../common/audit.service';
-import { daysOfSupply, DEFAULT_REFILL_POLICY, refillStatus, reminderToSend, scheduleAfterFill } from '../domain/refills';
+import { adherenceSummary, daysOfSupply, DEFAULT_REFILL_POLICY, refillStatus, reminderToSend, scheduleAfterFill } from '../domain/refills';
 import { num, PrismaService, Tx } from '../prisma/prisma.service';
 import { NotificationsService } from './notifications.service';
 import { RequestRefillDto } from './refills.dto';
@@ -134,32 +134,50 @@ export class RefillsService {
     return { checked: schedules.length, queued };
   }
 
-  /** Adherence summary for a patient's refill item, from fill history. */
+  /** Adherence summary for a patient's refill item, from fill history up to today. */
   async adherence(id: string) {
     const s = await this.get(id);
     const lines = await this.prisma.dispenseLine.findMany({
       where: { prescriptionItemId: s.prescriptionItemId },
-      include: { dispenseOrder: true },
+      select: { dispenseOrderId: true, dispensedAt: true },
       orderBy: { dispensedAt: 'asc' },
     });
-    const fills = new Map<string, Date>();
-    for (const l of lines) if (!fills.has(l.dispenseOrderId)) fills.set(l.dispenseOrderId, l.dispensedAt);
     const days = daysOfSupply(supplyInputs(s.prescriptionItem));
-    const dates = [...fills.values()];
-    const lateness = dates.slice(1).map((d, i) => Math.round((d.getTime() - dates[i]!.getTime()) / 86_400_000) - days);
+    const summary = adherenceSummary({ fillDates: fillDates(lines), daysOfSupply: days, graceDays: s.graceDays, periodStart: s.createdAt, periodEnd: new Date(), therapyEnd: therapyEnd(s, days) });
     return {
       scheduleId: s.id,
-      fills: dates.length,
       refillsUsed: s.refillsUsed,
       refillsAuthorised: s.refillsAuthorised,
       daysOfSupplyPerFill: days,
-      averageDaysLate: lateness.length ? lateness.reduce((a, b) => a + b, 0) / lateness.length : 0,
+      ...summary,
       status: refillStatus(s),
     };
   }
 }
 
-function supplyInputs(item: PrescriptionItem & { drug: Drug }) {
+/** One date per fill: the first line dispensed on each order. */
+export function fillDates(lines: { dispenseOrderId: string; dispensedAt: Date }[]): Date[] {
+  const fills = new Map<string, Date>();
+  for (const l of lines) {
+    const seen = fills.get(l.dispenseOrderId);
+    if (!seen || l.dispensedAt < seen) fills.set(l.dispenseOrderId, l.dispensedAt);
+  }
+  return [...fills.values()];
+}
+
+/**
+ * When the patient is no longer expected to have supply: the prescription's
+ * expiry, or the end of the last fill once the course is completed or cancelled.
+ */
+export function therapyEnd(s: Pick<RefillSchedule, 'status' | 'expiresAt' | 'lastDispensedAt'>, daysPerFill: number): Date {
+  if ((s.status === 'COMPLETED' || s.status === 'CANCELLED') && s.lastDispensedAt) {
+    const end = new Date(s.lastDispensedAt.getTime() + (daysPerFill - 1) * 86_400_000);
+    return end < s.expiresAt ? end : s.expiresAt;
+  }
+  return s.expiresAt;
+}
+
+export function supplyInputs(item: PrescriptionItem & { drug: Drug }) {
   const strength = num(item.drug.strengthValue);
   const sameUnit = strength && item.drug.strengthUnit?.toLowerCase() === item.doseUnit.toLowerCase();
   return {

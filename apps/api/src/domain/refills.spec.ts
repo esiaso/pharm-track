@@ -1,4 +1,4 @@
-import { daysOfSupply, isEarlyRefill, proportionOfDaysCovered, refillStatus, reminderToSend, scheduleAfterFill } from './refills';
+import { adherenceSummary, daysOfSupply, isEarlyRefill, proportionOfDaysCovered, refillStatus, reminderToSend, scheduleAfterFill } from './refills';
 import { DEFAULT_TEMPLATES, normaliseKenyanMobile, PRIVATE_TEMPLATES, renderTemplate, tidySms, unknownPlaceholders } from './sms';
 
 const d = (s: string) => new Date(`${s}T00:00:00Z`);
@@ -55,6 +55,19 @@ describe('refill schedule', () => {
       d('2026-03-01'),
     );
     expect(pdc).toBeCloseTo(60 / 60, 5);
+  });
+
+  it('summarises adherence: late refills, average lateness and days covered', () => {
+    // 30-day supplies collected Jan 1, Feb 10 (10 days late) and Mar 12 (on time).
+    const a = adherenceSummary({ fillDates: [d('2026-02-10'), d('2026-01-01'), d('2026-03-12')], daysOfSupply: 30, graceDays: 3, periodStart: d('2026-01-01'), periodEnd: d('2026-04-10') });
+    expect(a).toMatchObject({ fills: 3, lateRefills: 1, averageDaysLate: 5, observedDays: 100 });
+    expect(a.pdc).toBeCloseTo(0.9, 3);
+  });
+
+  it('does not count days after the course ended, and starts at the first fill', () => {
+    const a = adherenceSummary({ fillDates: [d('2026-03-01')], daysOfSupply: 30, graceDays: 3, periodStart: d('2026-01-01'), periodEnd: d('2026-06-30'), therapyEnd: d('2026-03-30') });
+    expect(a).toMatchObject({ fills: 1, lateRefills: 0, pdc: 1, observedDays: 30 });
+    expect(adherenceSummary({ fillDates: [], daysOfSupply: 30, graceDays: 3, periodStart: d('2026-01-01'), periodEnd: d('2026-02-01') }).pdc).toBeNull();
   });
 });
 
