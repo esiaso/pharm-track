@@ -359,4 +359,50 @@ run('FHIR facade and data protection end-to-end', () => {
     send.mockRestore();
     expect(await prisma.notification.findUniqueOrThrow({ where: { id: n.id } })).toMatchObject({ status: 'FAILED', attempts: 1 });
   });
+  it('lets a consultant override a hard stop only where the facility allows it, and records who', async () => {
+    const rx = (over: Record<string, unknown> = {}) => ({
+      externalId: `CT-RX-HS-${Math.random().toString(36).slice(2)}`,
+      patientId: 'PAT-HS',
+      encounterId: 'ENC-HS',
+      prescriberId: 'dr.otieno',
+      facilityId: 'FAC-HS',
+      storeId: 'STORE-1',
+      signedAt: new Date().toISOString(),
+      context: { ageMonths: 480, weightKg: 70, diagnoses: [{ system: 'ICD10', code: 'K25.9' }] },
+      items: [{ ref: 'L1', hptCode: 'SAMPLE-HPT-0004', atcCode: 'M01AE01', dose: 400, doseUnit: 'mg', frequency: 'TDS', frequencyPerDay: 3, route: 'ORAL', durationDays: 3, quantity: 9 }],
+      ...over,
+    });
+
+    // Off by default: blocked, and nothing is overridable.
+    const off = await api().post('/api/v1/prescriptions').set(SYSTEM).send(rx()).expect(422);
+    expect(off.body.blocking[0].type).toBe('CONTRAINDICATION');
+    expect(off.body.overridable).toEqual([]);
+    const key = off.body.blocking[0].key;
+    await api().post('/api/v1/prescriptions').set(SYSTEM)
+      .send(rx({ overrides: [{ key, reason: 'Short course with PPI cover, reviewed', authorisedBy: 'dr.consultant' }] }))
+      .expect(422);
+
+    // The administrator turns it on for the facility.
+    await api().put('/api/v1/facilities/FAC-HS/profile').set(ADMIN).send({ name: 'HS Clinic', allowHardStopOverride: true }).expect(200);
+    const on = await api().post('/api/v1/prescriptions').set(SYSTEM).send(rx()).expect(422);
+    expect(on.body.overridable).toEqual([key]);
+    const created = await api().post('/api/v1/prescriptions').set(SYSTEM)
+      .send(rx({ overrides: [{ key, reason: 'Short course with PPI cover, reviewed', authorisedBy: 'dr.consultant' }] }))
+      .expect(201);
+    expect(created.body.items[0].safetyAlerts[0]).toMatchObject({ severity: 'HARD_STOP', overrideAuthorisedBy: 'dr.consultant' });
+
+    // At verification the hard stop fires again; the pharmacist cannot name themselves as the consultant.
+    const orderId = created.body.dispenseOrders[0].id;
+    const pharm = H('PHARMACIST', 'u-pharm-hs');
+    const v1 = await api().post(`/api/v1/dispensing/orders/${orderId}/verify`).set(pharm).send({}).expect(422);
+    expect(v1.body.overridable).toEqual([v1.body.blocking[0].key]);
+    const vkey = v1.body.blocking[0].key;
+    await api().post(`/api/v1/dispensing/orders/${orderId}/verify`).set(pharm)
+      .send({ overrides: [{ key: vkey, reason: 'Consultant confirmed by phone, PPI given', authorisedBy: 'u-pharm-hs' }] })
+      .expect(422);
+    await api().post(`/api/v1/dispensing/orders/${orderId}/verify`).set(pharm)
+      .send({ overrides: [{ key: vkey, reason: 'Consultant confirmed by phone, PPI given', authorisedBy: 'dr.consultant' }] })
+      .expect(200);
+    expect(await prisma.auditLog.count({ where: { action: 'safety.hard-stop-override' } })).toBe(2);
+  });
 });

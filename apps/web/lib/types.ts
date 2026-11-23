@@ -40,6 +40,7 @@ export interface StoredAlert {
   message: string;
   overriddenBy: string | null;
   overrideReason: string | null;
+  overrideAuthorisedBy?: string | null;
   raisedAt: string;
 }
 

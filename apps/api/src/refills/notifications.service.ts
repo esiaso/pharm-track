@@ -181,7 +181,11 @@ export class NotificationsService {
   }
 
   async setFacilityProfile(facilityId: string, dto: FacilityProfileDto, actor: Actor) {
-    const data = { name: dto.name.trim(), phone: dto.phone?.trim() || null };
+    const data = {
+      name: dto.name.trim(),
+      phone: dto.phone?.trim() || null,
+      ...(dto.allowHardStopOverride === undefined ? {} : { allowHardStopOverride: dto.allowHardStopOverride }),
+    };
     return this.prisma.$transaction(async (tx) => {
       const before = await tx.facilityProfile.findUnique({ where: { facilityId } });
       const after = await tx.facilityProfile.upsert({ where: { facilityId }, create: { facilityId, ...data }, update: data });

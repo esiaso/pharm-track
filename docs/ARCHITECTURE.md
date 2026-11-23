@@ -118,6 +118,13 @@ strength share a unit, otherwise the prescribed duration.
 | WARNING | Needs a prescriber override with a reason (5+ chars) | Needs the pharmacist's own override |
 | HARD_STOP | Blocks signing | Blocks dispensing |
 
+A facility can allow a consultant override of hard stops (Settings, "Safety policy";
+off by default). The override then needs the authorising consultant (not the user
+recording it) and a clinical reason of 15+ characters, at prescribing and at
+verification. Formulary hard stops are never overridable. Each hard-stop override is
+stored on the `SafetyAlert` (`overrideAuthorisedBy`) and audited as
+`safety.hard-stop-override`.
+
 Checks: formulary status (facility status overrides suite status, except
 DISCONTINUED), allergies by drug or ATC class (confirmed severe → hard stop),
 drug-drug interactions by ATC prefix (with current medications from recent
@@ -185,8 +192,9 @@ full REST surface in [openapi.json](api/openapi.json).
    PharmTrack's proposal; adjust the clients once those teams confirm.
 4. **SMS gateway.** Africa's Talking is supported directly (`SMS_PROVIDER=africastalking`,
    with delivery reports). `SMS_PROVIDER=http` posts a neutral payload for other gateways.
-5. **Hard stops cannot be overridden.** Some facilities allow a consultant override;
-   that would be a policy flag.
+5. **Hard stops.** Blocked everywhere unless the facility turns on the consultant
+   override in Settings (off by default). Confirm with the clinical team which
+   facilities should allow it.
 
 ## Phased plan
 

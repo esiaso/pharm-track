@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { ArrayMinSize, IsArray, IsBoolean, IsIn, IsNumber, IsOptional, IsPositive, IsString, ValidateNested } from 'class-validator';
+import { ArrayMinSize, IsArray, IsBoolean, IsIn, IsNumber, IsOptional, IsPositive, IsString, MaxLength, ValidateNested } from 'class-validator';
 
 export class DiagnosisDto {
   @IsIn(['ICD10', 'ICD11']) system: 'ICD10' | 'ICD11';
@@ -37,5 +37,7 @@ export class SafetyCheckDto {
 
 export class OverrideDto {
   @IsString() key: string;
-  @IsString() reason: string;
+  @IsString() @MaxLength(500) reason: string;
+  /** For a hard stop: the consultant who authorised the override (only where the facility allows it). */
+  @IsOptional() @IsString() @MaxLength(80) authorisedBy?: string;
 }

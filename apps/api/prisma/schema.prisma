@@ -22,24 +22,24 @@ datasource db {
 /// WHO ATC classification. One row per node of the 5-level hierarchy,
 /// e.g. J (1) > J01 (2) > J01C (3) > J01CA (4) > J01CA04 (5, amoxicillin).
 model AtcCode {
-  code       String    @id
-  level      Int // 1..5
-  name       String
-  parentCode String?
-  parent     AtcCode?  @relation("AtcHierarchy", fields: [parentCode], references: [code])
-  children   AtcCode[] @relation("AtcHierarchy")
+  code             String    @id
+  level            Int // 1..5
+  name             String
+  parentCode       String?
+  parent           AtcCode?  @relation("AtcHierarchy", fields: [parentCode], references: [code])
+  children         AtcCode[] @relation("AtcHierarchy")
   /// WHO Defined Daily Dose, only for level-5 codes where WHO publishes one.
-  ddd        Decimal?
-  dddUnit    String?
-  dddRoute   String?
+  ddd              Decimal?
+  dddUnit          String?
+  dddRoute         String?
   /// Code-set release this row came from, e.g. "WHO-ATC-2026".
-  release    String
+  release          String
   /// Set when a full release no longer contains this code. Existing drugs keep it until re-coded.
   retiredInRelease String?
-  updatedAt  DateTime  @updatedAt
-  drugs      Drug[]
+  updatedAt        DateTime  @updatedAt
+  drugs            Drug[]
   /// All DDDs WHO publishes for this code (one per route / form). `ddd` above is the first (oral preferred).
-  ddds       AtcDdd[]
+  ddds             AtcDdd[]
 
   @@index([parentCode])
 }
@@ -59,34 +59,34 @@ model AtcDdd {
 
 /// Kenya Pharmacy and Poisons Board Health Products and Technologies code list.
 model HptCode {
-  code        String   @id
-  description String
-  category    String?
+  code             String   @id
+  description      String
+  category         String?
   /// Registration status as published by PPB (e.g. REGISTERED, RETAINED, WITHDRAWN).
-  ppbStatus   String?
-  release     String
+  ppbStatus        String?
+  release          String
   /// Set when a full release no longer contains this code.
   retiredInRelease String?
-  updatedAt   DateTime @updatedAt
-  drug        Drug?
+  updatedAt        DateTime @updatedAt
+  drug             Drug?
 }
 
 /// One row per bulk import of a code set, for traceability.
 model CodeSetImport {
-  id          String     @id @default(uuid())
-  codeSystem  CodeSystem
-  release     String
+  id            String     @id @default(uuid())
+  codeSystem    CodeSystem
+  release       String
   /// FULL: the release is complete, so codes missing from it are marked retired. PARTIAL: only adds or updates.
-  mode        ImportMode @default(PARTIAL)
-  rowsTotal   Int
-  rowsCreated Int
-  rowsUpdated Int
-  rowsUnchanged Int      @default(0)
-  rowsRetired Int        @default(0)
-  rowsFailed  Int
-  importedBy  String
-  importedAt  DateTime   @default(now())
-  errors      Json?
+  mode          ImportMode @default(PARTIAL)
+  rowsTotal     Int
+  rowsCreated   Int
+  rowsUpdated   Int
+  rowsUnchanged Int        @default(0)
+  rowsRetired   Int        @default(0)
+  rowsFailed    Int
+  importedBy    String
+  importedAt    DateTime   @default(now())
+  errors        Json?
 }
 
 enum CodeSystem {
@@ -262,11 +262,11 @@ model Contraindication {
   diagnosisPrefix String
   severity        AlertSeverity
   rationale       String
-  status      RuleStatus          @default(ACTIVE)
-  ruleSetId   String?
-  ruleSet     RuleSet?            @relation(fields: [ruleSetId], references: [id])
+  status          RuleStatus      @default(ACTIVE)
+  ruleSetId       String?
+  ruleSet         RuleSet?        @relation(fields: [ruleSetId], references: [id])
   /// Row identifier in the source knowledge base, for traceability.
-  externalRef String?
+  externalRef     String?
 
   @@index([atcPrefix])
   @@index([ruleSetId])
@@ -298,11 +298,11 @@ model DoseLimitRule {
   maxDailyDose      Decimal?
   severity          AlertSeverity @default(WARNING)
   note              String?
-  status      RuleStatus          @default(ACTIVE)
-  ruleSetId   String?
-  ruleSet     RuleSet?            @relation(fields: [ruleSetId], references: [id])
+  status            RuleStatus    @default(ACTIVE)
+  ruleSetId         String?
+  ruleSet           RuleSet?      @relation(fields: [ruleSetId], references: [id])
   /// Row identifier in the source knowledge base, for traceability.
-  externalRef String?
+  externalRef       String?
 
   @@index([ruleSetId])
 }
@@ -311,19 +311,19 @@ model DoseLimitRule {
 /// Medicines and Therapeutics Committee). Imported as DRAFT; only ACTIVE rules
 /// are used by the safety check. A second pharmacist must approve activation.
 model RuleSet {
-  id                String           @id @default(uuid())
+  id                String             @id @default(uuid())
   kind              RuleKind
   name              String
   /// e.g. "Facility MTC", a knowledge base vendor; activating a set retires the previous active set of the same kind and source.
   source            String
   version           String
-  status            RuleStatus       @default(DRAFT)
+  status            RuleStatus         @default(DRAFT)
   notes             String?
   rowsTotal         Int
   rowsFailed        Int
   errors            Json?
   importedBy        String
-  importedAt        DateTime         @default(now())
+  importedAt        DateTime           @default(now())
   approvedBy        String?
   approvedAt        DateTime?
   retiredBy         String?
@@ -528,18 +528,20 @@ model PrescriptionItem {
 /// Every alert raised for an item, at prescribing or at pharmacist verification,
 /// with the override (if any). This is the override log.
 model SafetyAlert {
-  id                 String           @id @default(uuid())
-  prescriptionItemId String
-  prescriptionItem   PrescriptionItem @relation(fields: [prescriptionItemId], references: [id])
-  stage              SafetyStage
+  id                   String           @id @default(uuid())
+  prescriptionItemId   String
+  prescriptionItem     PrescriptionItem @relation(fields: [prescriptionItemId], references: [id])
+  stage                SafetyStage
   /// Stable key so an override can be matched to its alert, e.g. "ALLERGY:<allergyId>".
-  alertKey           String
-  type               SafetyAlertType
-  severity           AlertSeverity
-  message            String
-  overriddenBy       String?
-  overrideReason     String?
-  raisedAt           DateTime         @default(now())
+  alertKey             String
+  type                 SafetyAlertType
+  severity             AlertSeverity
+  message              String
+  overriddenBy         String?
+  overrideReason       String?
+  /// Consultant who authorised overriding a hard stop.
+  overrideAuthorisedBy String?
+  raisedAt             DateTime         @default(now())
 
   @@index([prescriptionItemId])
 }
@@ -725,10 +727,12 @@ model PatientContactPreference {
 
 /// Facility details used in patient messages and labels.
 model FacilityProfile {
-  facilityId String   @id
-  name       String
-  phone      String?
-  updatedAt  DateTime @updatedAt
+  facilityId            String   @id
+  name                  String
+  phone                 String?
+  /// Lets a consultant authorise overriding a hard-stop safety alert. Off by default.
+  allowHardStopOverride Boolean  @default(false)
+  updatedAt             DateTime @updatedAt
 }
 
 model SmsTemplate {
@@ -895,28 +899,28 @@ model StockOutEpisode {
 /// A periodic report as generated and, once checked, submitted. The data is
 /// frozen at generation so what was sent can always be shown again.
 model ReportRun {
-  id           String        @id @default(uuid())
-  kind         ReportKind
-  facilityId   String
+  id          String       @id @default(uuid())
+  kind        ReportKind
+  facilityId  String
   /// Calendar month, e.g. "2026-11" (Nairobi time).
-  period       String
-  periodFrom   DateTime
-  periodTo     DateTime
+  period      String
+  periodFrom  DateTime
+  periodTo    DateTime
   /// 1 for the first submission of a period, then 2, 3… for amendments.
-  version      Int
-  status       ReportStatus  @default(DRAFT)
-  data         Json
-  summary      Json
+  version     Int
+  status      ReportStatus @default(DRAFT)
+  data        Json
+  summary     Json
   /// Data-quality findings shown before submission.
-  checks       Json
-  generatedBy  String
-  generatedAt  DateTime      @default(now())
-  submittedBy  String?
-  submittedAt  DateTime?
+  checks      Json
+  generatedBy String
+  generatedAt DateTime     @default(now())
+  submittedBy String?
+  submittedAt DateTime?
   /// Reference returned by the receiving system.
-  externalRef  String?
+  externalRef String?
   /// The submitted run this one replaces.
-  amendsId     String?
+  amendsId    String?
 
   @@index([kind, facilityId, period])
 }
