@@ -227,4 +227,24 @@ run('Reporting end-to-end', () => {
     const after = await api().get('/api/v1/reports/adrs/ppb-queue').set(PHARMACIST).expect(200);
     expect(after.body.counts).toMatchObject({ pending: 1, overdue: 0, acknowledged: 1 });
   });
+
+  it('searches: exact patient and prescription numbers only, medicines by part of the name', async () => {
+    const rx = await prescribeAndDispense('DR-SEARCH', [item('SAMPLE-HPT-0001', 'J01CA04', 10)], new Date(), 'PAT-S1');
+    const s = (q: string, facilityId = 'FAC-1') => api().get('/api/v1/search').query({ q, facilityId }).set(PHARMACIST).expect(200);
+
+    const byPatient = await s('pat-s1');
+    expect(byPatient.body.patients).toEqual([{ patientId: 'PAT-S1' }]);
+    expect(await prisma.patientAccessLog.count({ where: { patientId: 'PAT-S1', action: 'search' } })).toBe(1);
+    expect((await s('PAT-S')).body.patients).toEqual([]);
+    expect((await s('PAT-S1', 'FAC-2')).body.patients).toEqual([]);
+
+    const byRx = await s(rx.externalId);
+    expect(byRx.body.prescriptions).toEqual([{ externalId: rx.externalId, patientId: 'PAT-S1', status: expect.any(String), orderId: rx.dispenseOrders[0].id }]);
+
+    const byName = await s('amoxi');
+    expect(byName.body.drugs.map((d: any) => d.hptCode)).toContain('SAMPLE-HPT-0001');
+    expect(byName.body.patients).toEqual([]);
+    expect((await s('a')).body).toEqual({ patients: [], prescriptions: [], drugs: [] });
+    await api().get('/api/v1/search').query({ q: 'amoxi' }).set(H('SYSTEM', 'clinitrack')).expect(403);
+  });
 });

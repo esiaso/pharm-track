@@ -18,6 +18,7 @@ import { ContentModule } from './content/content.module';
 import { PatientAccessInterceptor } from './common/patient-access';
 import { FhirModule } from './fhir/fhir.module';
 import { PrivacyModule } from './privacy/privacy.module';
+import { SearchModule } from './search/search.module';
 
 @Controller()
 class HealthController {
@@ -58,6 +59,7 @@ class HealthController {
     ReportsModule,
     FhirModule,
     PrivacyModule,
+    SearchModule,
   ],
   controllers: [HealthController],
   providers: [

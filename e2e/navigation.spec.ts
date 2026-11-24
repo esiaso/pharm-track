@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { consoleErrors, forbidExternalRequests, signIn } from './helpers';
+import { consoleErrors, forbidExternalRequests, receivePrescription, signIn } from './helpers';
 
 const SCREENS: [string, RegExp][] = [
   ['/', /Overview/],
@@ -65,4 +65,26 @@ test('the overview counts refills by status and links to that list', async ({ pa
   await overdue.getByRole('link').click();
   await expect(page).toHaveURL(/\/refills\?status=OVERDUE/);
   await expect(page.getByLabel('Status')).toHaveValue('OVERDUE');
+});
+
+test('the search box finds a prescription by its number and a medicine by name', async ({ page, request }) => {
+  const { externalId } = await receivePrescription(request, { patientId: 'PAT-SEARCH' });
+  const errors = consoleErrors(page);
+  await signIn(page, 'PHARMACIST');
+  await page.goto('/');
+  const box = page.getByRole('textbox', { name: 'Search' });
+  const results = page.locator('.search-results');
+
+  await box.fill(externalId.toLowerCase());
+  await expect(results.getByRole('button', { name: new RegExp(`Prescription ${externalId}`) })).toBeVisible();
+  await box.press('Enter');
+  await expect(page.getByRole('heading', { name: /PAT-SEARCH/ })).toBeVisible();
+
+  await box.fill('metf');
+  await results.getByRole('button', { name: /Metformin/ }).first().click();
+  await expect(page).toHaveURL(/\/formulary\/[0-9a-f-]+$/);
+
+  await box.fill('PAT-');
+  await expect(results).toContainText('Patients and prescriptions need the full number');
+  expect(errors).toEqual([]);
 });

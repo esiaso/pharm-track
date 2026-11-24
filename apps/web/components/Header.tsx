@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { ComponentType, ReactNode, SVGProps, useEffect, useRef, useState } from 'react';
+import { api } from '../lib/api';
 import { hasRole, ROLES, useSession } from '../lib/session';
 import {
   IconBook, IconChart, IconChevronDown, IconClose, IconFlask, IconHome, IconMenu, IconMoon, IconPanel, IconPill,
@@ -114,13 +115,26 @@ function Topbar({ onMenu, onExpand }: { onMenu: () => void; onExpand?: () => voi
   );
 }
 
-/** Jump to a page by name; Ctrl/⌘ K focuses it. */
+type Found = { href: string; label: string; detail?: string; icon: ComponentType<SVGProps<SVGSVGElement>> };
+type SearchResults = {
+  patients: { patientId: string }[];
+  prescriptions: { externalId: string; patientId: string; orderId: string | null; status: string }[];
+  drugs: { id: string; genericName: string; strength: string; dosageForm: string; hptCode: string }[];
+};
+
+/**
+ * Jump to a page, a patient or prescription (exact number), or a medicine
+ * (part of its name or HPT code). Ctrl/⌘ K focuses it.
+ */
 function PageSearch() {
   const router = useRouter();
   const groups = useNav();
+  const { session } = useSession();
   const [q, setQ] = useState('');
   const [focus, setFocus] = useState(false);
+  const [found, setFound] = useState<{ q: string; items: Found[] }>({ q: '', items: [] });
   const ref = useRef<HTMLInputElement>(null);
+  const blurTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); ref.current?.focus(); }
@@ -128,19 +142,53 @@ function PageSearch() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
-  const items = groups.flatMap((g) => g.items).filter((n) => n.label.toLowerCase().includes(q.trim().toLowerCase()));
+  const term = q.trim();
+  useEffect(() => {
+    if (term.length < 2) return;
+    let live = true;
+    const t = setTimeout(() => {
+      api<SearchResults>(`/search?q=${encodeURIComponent(term)}&facilityId=${encodeURIComponent(session.facilityId)}`)
+        .then((r) => {
+          if (!live) return;
+          setFound({
+            q: term,
+            items: [
+              ...r.patients.map((p) => ({ href: `/patients/${encodeURIComponent(p.patientId)}`, label: `Patient ${p.patientId}`, icon: IconUsers })),
+              ...r.prescriptions.map((p) => ({
+                href: p.orderId ? `/dispensing/${p.orderId}` : `/patients/${encodeURIComponent(p.patientId)}`,
+                label: `Prescription ${p.externalId}`,
+                detail: `Patient ${p.patientId}`,
+                icon: IconPill,
+              })),
+              ...r.drugs.map((d) => ({ href: `/formulary/${d.id}`, label: `${d.genericName} ${d.strength}`, detail: `${d.dosageForm.toLowerCase()} · ${d.hptCode}`, icon: IconBook })),
+            ],
+          });
+        })
+        .catch(() => { if (live) setFound({ q: term, items: [] }); });
+    }, 250);
+    return () => { live = false; clearTimeout(t); };
+  }, [term, session.facilityId]);
+  const pages: Found[] = groups.flatMap((g) => g.items).filter((n) => n.label.toLowerCase().includes(term.toLowerCase()));
+  const items = [...pages, ...(found.q === term ? found.items : [])];
+  const searching = term.length >= 2 && found.q !== term;
   const go = (href: string) => { setQ(''); ref.current?.blur(); router.push(href); };
   return (
     <form className="search" role="search" onSubmit={(e) => { e.preventDefault(); if (items[0]) go(items[0].href); }}>
       <IconSearch />
-      <input ref={ref} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search pages…" aria-label="Search pages"
-        onFocus={() => setFocus(true)} onBlur={() => setTimeout(() => setFocus(false), 150)} />
+      <input ref={ref} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search pages, patients, medicines…" aria-label="Search"
+        onFocus={() => { clearTimeout(blurTimer.current); setFocus(true); }}
+        onBlur={() => { blurTimer.current = setTimeout(() => setFocus(false), 150); }} />
       <kbd>⌘ K</kbd>
-      {focus && q && (
+      {focus && term && (
         <ul className="search-results card">
-          {items.length === 0 && <li className="muted small">No page called “{q}”.</li>}
+          {items.length === 0 && <li className="muted small">{searching ? 'Searching…' : `Nothing found for “${term}”. Patients and prescriptions need the full number.`}</li>}
           {items.map((n) => (
-            <li key={n.href}><button type="button" onMouseDown={() => go(n.href)}><n.icon />{n.label}</button></li>
+            <li key={n.href}>
+              <button type="button" onMouseDown={() => go(n.href)}>
+                <n.icon />
+                <span>{n.label}{n.detail && <span className="muted small"> · {n.detail}</span>}</span>
+              </button>
+            </li>
           ))}
         </ul>
       )}

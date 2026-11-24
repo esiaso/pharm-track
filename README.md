@@ -41,6 +41,7 @@ The pharmacy web app (`apps/web`) has:
 - **Refills**: due, overdue and upcoming refills for the facility, start a refill, see fills and SMS sent.
 - **Patients**: allergies (record, confirm), medication history, adverse drug reactions with PPB report download.
 - **Formulary**: search by name, ATC or HPT code, edit with a reason (versioned), facility status, prices, version history.
+- **Search** (top bar, Ctrl/⌘ K): pages by name, a patient or a CliniTrack prescription by its full number (no partial matches, so it can't list patients; each patient found is written to the access log), and medicines by part of the name or HPT code.
 
 - **Clinical content** (pharmacists; code lists by administrators): load WHO ATC/DDD and PPB HPT releases, safety rule sets (a second pharmacist approves), facility formularies and the drug master from CSV, each checked before it is applied. See [docs/CLINICAL-CONTENT.md](docs/CLINICAL-CONTENT.md), which also covers the `npm run content:import` command line.
 - **Reports** (pharmacists): monthly returns for SHA/DHA (through CliniTrack) and stock-out reports for SupplyTrack, each checked, submitted and amended by version; stock-out days per item; WHO prescribing indicators by prescriber; refill adherence (days covered, late refills) by patient; the controlled-drug register with dispenser, witness and totals per drug; the ADR queue for PPB with due dates and batch export. Tables download as CSV.
