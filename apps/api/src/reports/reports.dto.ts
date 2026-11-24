@@ -1,4 +1,5 @@
-import { ArrayMaxSize, ArrayMinSize, IsArray, IsBoolean, IsDateString, IsIn, IsOptional, IsString, Matches } from 'class-validator';
+import { Type } from 'class-transformer';
+import { ArrayMaxSize, ArrayMinSize, IsArray, IsBoolean, IsDateString, IsIn, IsInt, IsOptional, IsString, Matches, Max, Min } from 'class-validator';
 
 export class PeriodQuery {
   @IsOptional() @IsString() facilityId?: string;
@@ -14,7 +15,14 @@ export class StockOutQuery extends PeriodQuery {
   @IsOptional() @IsString() storeId?: string;
 }
 
-export class ControlledRegisterQuery extends StockOutQuery {
+/** Paging for report tables. Totals and CSV downloads always cover every row. */
+export class PagedPeriodQuery extends PeriodQuery {
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(1000) limit?: number;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(0) offset?: number;
+}
+
+export class ControlledRegisterQuery extends PagedPeriodQuery {
+  @IsOptional() @IsString() storeId?: string;
   @IsOptional() @IsString() drugId?: string;
 }
 

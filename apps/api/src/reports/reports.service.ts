@@ -1,5 +1,5 @@
 import { ConflictException, Injectable, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, RefillSchedule } from '@prisma/client';
 import { Actor } from '../common/auth';
 import { AuditService } from '../common/audit.service';
 import { isAntimicrobial } from '../domain/codes';
@@ -19,6 +19,8 @@ export interface Check {
 }
 
 type Period = { facilityId?: string; from: Date; to: Date };
+const ADHERENCE_CACHE_MS = 5 * 60_000;
+type AdherenceRow = Awaited<ReturnType<ReportsService['computeAdherenceRows']>>[number];
 
 const ADR_DAYS = {
   serious: Number(process.env.ADR_SERIOUS_DAYS ?? 7),
@@ -112,39 +114,31 @@ export class ReportsService {
    * timeliness: proportion of days covered (PDC) in the period, late refills
    * and average lateness. PDC of 80% or more counts as adherent.
    */
-  async adherence(filter: Period) {
-    const schedules = await this.prisma.refillSchedule.findMany({
-      where: { facilityId: filter.facilityId, lastDispensedAt: { not: null }, createdAt: { lt: filter.to } },
-      include: { prescriptionItem: { include: { drug: true } } },
-      take: 5000,
-    });
-    const lines = await this.prisma.dispenseLine.findMany({
-      where: { prescriptionItemId: { in: schedules.map((s) => s.prescriptionItemId) }, dispensedAt: { lt: filter.to } },
-      select: { prescriptionItemId: true, dispenseOrderId: true, dispensedAt: true },
-    });
-    const byItem = new Map<string, typeof lines>();
-    for (const l of lines) byItem.set(l.prescriptionItemId, [...(byItem.get(l.prescriptionItemId) ?? []), l]);
-    const rows = schedules
-      .map((s) => {
-        const days = daysOfSupply(supplyInputs(s.prescriptionItem));
-        const a = adherenceSummary({ fillDates: fillDates(byItem.get(s.prescriptionItemId) ?? []), daysOfSupply: days, graceDays: s.graceDays, periodStart: filter.from, periodEnd: filter.to, therapyEnd: therapyEnd(s, days) });
-        return {
-          scheduleId: s.id,
-          patientId: s.patientId,
-          hptCode: s.prescriptionItem.drug.hptCode,
-          genericName: s.prescriptionItem.drug.genericName,
-          strength: s.prescriptionItem.drug.strength,
-          daysOfSupplyPerFill: days,
-          refillsUsed: s.refillsUsed,
-          refillsAuthorised: s.refillsAuthorised,
-          status: s.status,
-          nextDueDate: s.nextDueDate,
-          ...a,
-          adherent: a.pdc !== null && a.pdc >= ADHERENT_PDC,
-        };
-      })
-      .filter((r) => r.pdc !== null)
-      .sort((a, b) => a.pdc! - b.pdc! || a.patientId.localeCompare(b.patientId));
+  /**
+   * Recent adherence results by facility and period. Working them out takes
+   * about a second at a busy facility and blocks other requests meanwhile, and
+   * paging asks for the same period again, so results are kept for 5 minutes.
+   */
+  private readonly adherenceCache = new Map<string, { at: number; rows: Promise<AdherenceRow[]> }>();
+
+  private adherenceRows(filter: Period): Promise<AdherenceRow[]> {
+    const key = `${filter.facilityId ?? '*'}|${filter.from.toISOString()}|${filter.to.toISOString()}`;
+    const now = Date.now();
+    const hit = this.adherenceCache.get(key);
+    if (hit && now - hit.at < ADHERENCE_CACHE_MS) return hit.rows;
+    for (const [k, v] of this.adherenceCache) if (now - v.at >= ADHERENCE_CACHE_MS) this.adherenceCache.delete(k);
+    if (this.adherenceCache.size >= 20) this.adherenceCache.delete(this.adherenceCache.keys().next().value!);
+    const rows = this.computeAdherenceRows(filter);
+    this.adherenceCache.set(key, { at: now, rows });
+    rows.catch(() => this.adherenceCache.delete(key));
+    return rows;
+  }
+
+  async adherence(filter: Period & { limit?: number; offset?: number }) {
+    const rows = await this.adherenceRows(filter);
+    // Summary over every item; the rows (lowest coverage first) can be paged.
+    const offset = filter.offset ?? 0;
+    const page = filter.limit === undefined ? rows : rows.slice(offset, offset + filter.limit);
     const pdcs = rows.map((r) => r.pdc!).sort((a, b) => a - b);
     const median = pdcs.length ? (pdcs.length % 2 ? pdcs[(pdcs.length - 1) / 2]! : (pdcs[pdcs.length / 2 - 1]! + pdcs[pdcs.length / 2]!) / 2) : null;
     return {
@@ -160,8 +154,57 @@ export class ReportsService {
         lateRefills: rows.reduce((n, r) => n + r.lateRefills, 0),
         overdueNow: rows.filter((r) => r.status === 'OVERDUE').length,
       },
-      rows,
+      totalRows: rows.length,
+      rows: page,
     };
+  }
+
+  private async computeAdherenceRows(filter: Period) {
+    // Every refill item whose course overlaps the period, with its fill dates
+    // (first line of each order), in one query: a busy facility has tens of
+    // thousands, too many to list as parameters or to cap.
+    const fid = filter.facilityId ?? null;
+    const schedules = await this.prisma.$queryRaw<
+      {
+        id: string; patientId: string; status: RefillSchedule['status']; graceDays: number; expiresAt: Date; lastDispensedAt: Date | null; nextDueDate: Date | null;
+        refillsUsed: number; refillsAuthorised: number; quantity: Prisma.Decimal; dose: Prisma.Decimal; doseUnit: string; frequencyPerDay: Prisma.Decimal; durationDays: number;
+        hptCode: string; genericName: string; strength: string; strengthValue: Prisma.Decimal | null; strengthUnit: string | null; fills: Date[] | null;
+      }[]
+    >`
+      SELECT s.id, s."patientId", s.status, s."graceDays", s."expiresAt", s."lastDispensedAt", s."nextDueDate", s."refillsUsed", s."refillsAuthorised",
+             i.quantity, i.dose, i."doseUnit", i."frequencyPerDay", i."durationDays",
+             d."hptCode", d."genericName", d.strength, d."strengthValue", d."strengthUnit",
+             (SELECT array_agg(f.at ORDER BY f.at) FROM (
+                SELECT min(l."dispensedAt") AS at FROM "DispenseLine" l
+                WHERE l."prescriptionItemId" = s."prescriptionItemId" AND l."dispensedAt" < ${filter.to}
+                GROUP BY l."dispenseOrderId") f) AS fills
+      FROM "RefillSchedule" s
+      JOIN "PrescriptionItem" i ON i.id = s."prescriptionItemId"
+      JOIN "Drug" d ON d.id = i."drugId"
+      WHERE (${fid}::text IS NULL OR s."facilityId" = ${fid})
+        AND s."lastDispensedAt" IS NOT NULL AND s."createdAt" < ${filter.to} AND s."expiresAt" >= ${filter.from}`;
+    const all = schedules
+      .map((s) => {
+        const days = daysOfSupply(supplyInputs({ dose: s.dose, doseUnit: s.doseUnit, quantity: s.quantity, frequencyPerDay: s.frequencyPerDay, durationDays: s.durationDays, drug: { strengthValue: s.strengthValue, strengthUnit: s.strengthUnit } } as Parameters<typeof supplyInputs>[0]));
+        const a = adherenceSummary({ fillDates: s.fills ?? [], daysOfSupply: days, graceDays: s.graceDays, periodStart: filter.from, periodEnd: filter.to, therapyEnd: therapyEnd(s, days) });
+        return {
+          scheduleId: s.id,
+          patientId: s.patientId,
+          hptCode: s.hptCode,
+          genericName: s.genericName,
+          strength: s.strength,
+          daysOfSupplyPerFill: days,
+          refillsUsed: s.refillsUsed,
+          refillsAuthorised: s.refillsAuthorised,
+          status: s.status,
+          nextDueDate: s.nextDueDate,
+          ...a,
+          adherent: a.pdc !== null && a.pdc >= ADHERENT_PDC,
+        };
+      })
+      .filter((r) => r.pdc !== null)
+      .sort((a, b) => a.pdc! - b.pdc! || a.patientId.localeCompare(b.patientId));
+    return all;
   }
 
   /**
@@ -169,13 +212,15 @@ export class ReportsService {
    * dual sign-off, oldest first, and totals per drug. Returns are shown against
    * the line they came back on.
    */
-  async controlledRegister(filter: Period & { storeId?: string; drugId?: string }) {
-    const entries = await this.prisma.controlledDrugRegisterEntry.findMany({
-      where: {
-        recordedAt: { gte: filter.from, lt: filter.to },
-        drugId: filter.drugId,
-        dispenseLine: { dispenseOrder: { facilityId: filter.facilityId, storeId: filter.storeId } },
-      },
+  async controlledRegister(filter: Period & { storeId?: string; drugId?: string; limit?: number; offset?: number }) {
+    const where = {
+      recordedAt: { gte: filter.from, lt: filter.to },
+      drugId: filter.drugId,
+      dispenseLine: { dispenseOrder: { facilityId: filter.facilityId, storeId: filter.storeId } },
+    };
+    const limit = Math.min(filter.limit ?? 50_000, 50_000);
+    const [entries, total, sums] = await Promise.all([this.prisma.controlledDrugRegisterEntry.findMany({
+      where,
       include: {
         drug: { select: { id: true, genericName: true, strength: true, dosageForm: true, unitOfIssue: true, hptCode: true, controlledSchedule: true } },
         dispenseLine: {
@@ -185,9 +230,23 @@ export class ReportsService {
           },
         },
       },
-      orderBy: { recordedAt: 'asc' },
-      take: 5000,
-    });
+      orderBy: [{ recordedAt: 'asc' }, { id: 'asc' }],
+      take: limit,
+      skip: filter.offset ?? 0,
+    }),
+    this.prisma.controlledDrugRegisterEntry.count({ where }),
+    // Totals over the whole period, summed in the database.
+    this.prisma.$queryRaw<{ drugId: string; entries: number; issued: Prisma.Decimal; returned: Prisma.Decimal }[]>`
+      SELECT e."drugId", count(*)::int AS entries, sum(e.quantity) AS issued, sum(l."quantityReturned") AS returned
+      FROM "ControlledDrugRegisterEntry" e
+      JOIN "DispenseLine" l ON l.id = e."dispenseLineId"
+      JOIN "DispenseOrder" o ON o.id = l."dispenseOrderId"
+      WHERE e."recordedAt" >= ${filter.from} AND e."recordedAt" < ${filter.to}
+        AND (${filter.facilityId ?? null}::text IS NULL OR o."facilityId" = ${filter.facilityId ?? null})
+        AND (${filter.storeId ?? null}::text IS NULL OR o."storeId" = ${filter.storeId ?? null})
+        AND (${filter.drugId ?? null}::text IS NULL OR e."drugId" = ${filter.drugId ?? null})
+      GROUP BY e."drugId"`,
+    ]);
     const rows = entries.map((e) => ({
       id: e.id,
       recordedAt: e.recordedAt,
@@ -210,21 +269,22 @@ export class ReportsService {
       dispensedBy: e.dispensedBy,
       witnessedBy: e.witnessedBy,
     }));
-    const totals = new Map<string, { drugId: string; hptCode: string; genericName: string; strength: string; unitOfIssue: string; schedule: string; entries: number; issued: number; returned: number }>();
-    for (const r of rows) {
-      const t = totals.get(r.drugId) ?? { drugId: r.drugId, hptCode: r.hptCode, genericName: r.genericName, strength: r.strength, unitOfIssue: r.unitOfIssue, schedule: r.schedule, entries: 0, issued: 0, returned: 0 };
-      t.entries += 1;
-      t.issued = round(t.issued + r.quantity, 3);
-      t.returned = round(t.returned + r.quantityReturned, 3);
-      totals.set(r.drugId, t);
-    }
+    const drugs = new Map((await this.prisma.drug.findMany({ where: { id: { in: sums.map((t) => t.drugId) } } })).map((d) => [d.id, d]));
+    const totals = sums.map((t) => {
+      const d = drugs.get(t.drugId)!;
+      const issued = round(num(t.issued) ?? 0, 3);
+      const returned = round(num(t.returned) ?? 0, 3);
+      return { drugId: t.drugId, hptCode: d.hptCode, genericName: d.genericName, strength: d.strength, unitOfIssue: d.unitOfIssue, schedule: d.controlledSchedule, entries: t.entries, issued, returned, net: round(issued - returned, 3) };
+    });
     return {
       from: filter.from,
       to: filter.to,
       facilityId: filter.facilityId ?? null,
       storeId: filter.storeId ?? null,
-      truncated: entries.length === 5000,
-      totals: [...totals.values()].map((t) => ({ ...t, net: round(t.issued - t.returned, 3) })).sort((a, b) => a.genericName.localeCompare(b.genericName)),
+      total,
+      // Only a CSV (no limit) can be cut short, past 50,000 entries.
+      truncated: filter.limit === undefined && total > entries.length,
+      totals: totals.sort((a, b) => a.genericName.localeCompare(b.genericName)),
       entries: rows,
     };
   }

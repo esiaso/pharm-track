@@ -3,7 +3,7 @@ import { ApiTags } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 import { Actor, CurrentActor, Role, Roles } from '../common/auth';
 import { PatientData } from '../common/patient-access';
-import { AdrBatchDto, ControlledRegisterQuery, GenerateReportDto, ListRunsQuery, PeriodQuery, StockOutQuery, SubmitReportDto } from './reports.dto';
+import { AdrBatchDto, ControlledRegisterQuery, PagedPeriodQuery, GenerateReportDto, ListRunsQuery, PeriodQuery, StockOutQuery, SubmitReportDto } from './reports.dto';
 import { adherenceCsv, consumptionCsv, controlledRegisterCsv, prescribingCsv, ReportsService, stockOutCsv } from './reports.service';
 
 function period(from?: string, to?: string) {
@@ -60,10 +60,11 @@ export class ReportsController {
   /** Refill adherence per patient item (PDC, late refills). Defaults to the last 90 days. Names patients, so access is logged. */
   @Get('adherence')
   @PatientData('reports.adherence')
-  async adherence(@Query() q: PeriodQuery, @Req() req: Request & { patientAccess?: string[] }, @Res({ passthrough: true }) res: Response) {
+  async adherence(@Query() q: PagedPeriodQuery, @Req() req: Request & { patientAccess?: string[] }, @Res({ passthrough: true }) res: Response) {
     const to = q.to ? new Date(q.to) : new Date();
     const from = q.from ? new Date(q.from) : new Date(to.getTime() - 90 * 86_400_000);
-    const r = await this.service.adherence({ facilityId: q.facilityId, from, to });
+    const csv = q.format === 'csv';
+    const r = await this.service.adherence({ facilityId: q.facilityId, from, to, limit: csv ? undefined : (q.limit ?? 200), offset: csv ? 0 : q.offset });
     req.patientAccess = r.rows.map((x) => x.patientId);
     return maybeCsv(res, q.format, 'refill-adherence.csv', r, (b) => adherenceCsv(b.rows));
   }
@@ -72,7 +73,8 @@ export class ReportsController {
   @Get('controlled-drugs')
   @PatientData('reports.controlled-drugs')
   async controlledDrugs(@Query() q: ControlledRegisterQuery, @Req() req: Request & { patientAccess?: string[] }, @Res({ passthrough: true }) res: Response) {
-    const r = await this.service.controlledRegister({ facilityId: q.facilityId, storeId: q.storeId, drugId: q.drugId, ...period(q.from, q.to) });
+    const csv = q.format === 'csv';
+    const r = await this.service.controlledRegister({ facilityId: q.facilityId, storeId: q.storeId, drugId: q.drugId, ...period(q.from, q.to), limit: csv ? undefined : (q.limit ?? 200), offset: csv ? 0 : q.offset });
     // The CSV is not JSON, so name its patients for the access log.
     req.patientAccess = r.entries.map((e) => e.patientId);
     return maybeCsv(res, q.format, 'controlled-drug-register.csv', r, (b) => controlledRegisterCsv(b.entries));

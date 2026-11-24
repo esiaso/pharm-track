@@ -22,17 +22,27 @@ export class RefillsService {
   ) {}
 
   /** Refill queue for a facility: due and overdue first. */
-  list(filter: { facilityId?: string; patientId?: string; status?: RefillStatus }) {
+  list(filter: { facilityId?: string; patientId?: string; status?: RefillStatus; limit?: number; offset?: number }) {
     return this.prisma.refillSchedule.findMany({
       where: {
         facilityId: filter.facilityId,
         patientId: filter.patientId,
         status: filter.status ?? { in: OPEN },
       },
-      orderBy: [{ nextDueDate: 'asc' }],
+      // id breaks ties so pages don't overlap or skip rows that share a due date.
+      orderBy: [{ nextDueDate: 'asc' }, { id: 'asc' }],
       include: { prescriptionItem: { include: { drug: true } } },
-      take: 500,
+      take: filter.limit ?? 500,
+      skip: filter.offset ?? 0,
     });
+  }
+
+  /** Refills per status for a facility; `open` is upcoming, due and overdue together. */
+  async summary(facilityId?: string) {
+    const groups = await this.prisma.refillSchedule.groupBy({ by: ['status'], where: { facilityId }, _count: { _all: true } });
+    const counts = Object.fromEntries(Object.values(RefillStatus).map((st) => [st, 0])) as Record<RefillStatus, number>;
+    for (const g of groups) counts[g.status] = g._count._all;
+    return { facilityId: facilityId ?? null, counts, open: OPEN.reduce((n, st) => n + counts[st as RefillStatus], 0) };
   }
 
   async get(id: string) {

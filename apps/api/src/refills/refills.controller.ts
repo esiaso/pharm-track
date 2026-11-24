@@ -1,10 +1,10 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, ParseEnumPipe, Post, Put, Query } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import { NotificationPurpose, RefillStatus } from '@prisma/client';
+import { NotificationPurpose } from '@prisma/client';
 import { Actor, CurrentActor, Role, Roles, Webhook } from '../common/auth';
 import { PatientData } from '../common/patient-access';
 import { NotificationsService } from './notifications.service';
-import { ContactPreferenceDto, DeliveryReportDto, FacilityProfileDto, RequestRefillDto, SmsTemplateDto } from './refills.dto';
+import { ContactPreferenceDto, DeliveryReportDto, FacilityProfileDto, RefillListQuery, RequestRefillDto, SmsTemplateDto } from './refills.dto';
 import { RefillsService } from './refills.service';
 
 const PHARMACY = [Role.PHARMACIST, Role.PHARMACY_TECHNICIAN];
@@ -19,8 +19,15 @@ export class RefillsController {
 
   @Get('refills')
   @Roles(...PHARMACY, Role.SYSTEM, Role.PRESCRIBER)
-  list(@Query('facilityId') facilityId?: string, @Query('patientId') patientId?: string, @Query('status') status?: RefillStatus) {
-    return this.refills.list({ facilityId, patientId, status });
+  list(@Query() q: RefillListQuery) {
+    return this.refills.list(q);
+  }
+
+  /** How many refills a facility has in each status, for queue totals and paging. */
+  @Get('refills/summary')
+  @Roles(...PHARMACY, Role.SYSTEM, Role.PRESCRIBER)
+  summary(@Query('facilityId') facilityId?: string) {
+    return this.refills.summary(facilityId);
   }
 
   @Get('refills/:id')

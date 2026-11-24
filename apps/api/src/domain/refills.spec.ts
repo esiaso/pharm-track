@@ -57,6 +57,31 @@ describe('refill schedule', () => {
     expect(pdc).toBeCloseTo(60 / 60, 5);
   });
 
+  it('counts days covered the same as a day-by-day count', () => {
+    // Reference: mark each covered day, as the first version did.
+    const byDay = (fills: { dispensedAt: Date; daysOfSupply: number }[], from: Date, to: Date) => {
+      const start = d(from.toISOString().slice(0, 10)).getTime();
+      const end = d(to.toISOString().slice(0, 10)).getTime();
+      const covered = new Set<number>();
+      let cursor = 0;
+      for (const f of [...fills].sort((a, b) => a.dispensedAt.getTime() - b.dispensedAt.getTime())) {
+        const s = Math.max(d(f.dispensedAt.toISOString().slice(0, 10)).getTime(), cursor);
+        for (let i = 0; i < f.daysOfSupply; i++) if (s + i * 86_400_000 >= start && s + i * 86_400_000 <= end) covered.add(s + i * 86_400_000);
+        cursor = s + f.daysOfSupply * 86_400_000;
+      }
+      return covered.size / (Math.round((end - start) / 86_400_000) + 1);
+    };
+    let seed = 7;
+    const rnd = (n: number) => ((seed = (seed * 48271) % 2147483647) % n);
+    for (let t = 0; t < 300; t++) {
+      const base = d('2026-01-01').getTime();
+      const fills = Array.from({ length: 1 + rnd(4) }, () => ({ dispensedAt: new Date(base + rnd(200) * 86_400_000), daysOfSupply: 1 + rnd(60) }));
+      const from = new Date(base + rnd(120) * 86_400_000);
+      const to = new Date(from.getTime() + rnd(150) * 86_400_000);
+      expect(proportionOfDaysCovered(fills, from, to)).toBeCloseTo(byDay(fills, from, to), 10);
+    }
+  });
+
   it('summarises adherence: late refills, average lateness and days covered', () => {
     // 30-day supplies collected Jan 1, Feb 10 (10 days late) and Mar 12 (on time).
     const a = adherenceSummary({ fillDates: [d('2026-02-10'), d('2026-01-01'), d('2026-03-12')], daysOfSupply: 30, graceDays: 3, periodStart: d('2026-01-01'), periodEnd: d('2026-04-10') });

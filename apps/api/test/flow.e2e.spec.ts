@@ -278,9 +278,12 @@ run('PharmTrack end-to-end', () => {
     const report = await api().get('/api/v1/reports/adherence').query({ facilityId: 'FAC-1' }).set(PHARMACIST).expect(200);
     expect(report.body.rows.find((r: { scheduleId: string }) => r.scheduleId === scheduleId)).toMatchObject({ patientId: 'PAT-1', fills: 2, pdc: 1, adherent: true });
     expect(report.body.summary).toMatchObject({ pctAdherent: 100, lateRefills: 0 });
+    const firstRow = await api().get('/api/v1/reports/adherence').query({ facilityId: 'FAC-1', limit: 1 }).set(PHARMACIST).expect(200);
+    expect(firstRow.body.rows).toHaveLength(1);
+    expect(firstRow.body.totalRows).toBe(report.body.totalRows);
     const csv = await api().get('/api/v1/reports/adherence').query({ facilityId: 'FAC-1', format: 'csv' }).set(PHARMACIST).expect(200);
     expect(csv.text.split('\n')[0]).toContain('pdc_pct');
-    expect(await prisma.patientAccessLog.count({ where: { patientId: 'PAT-1', action: 'reports.adherence' } })).toBe(2);
+    expect(await prisma.patientAccessLog.count({ where: { patientId: 'PAT-1', action: 'reports.adherence' } })).toBe(3); // two reads and the CSV
   });
 
   it('refills two medicines on the same prescription, and re-requests a cancelled refill', async () => {
@@ -304,6 +307,17 @@ run('PharmTrack end-to-end', () => {
     const first = await api().post(`/api/v1/refills/${schedules[0]!.id}/request`).set(PHARMACIST).send({}).expect(201);
     const second = await api().post(`/api/v1/refills/${schedules[1]!.id}/request`).set(PHARMACIST).send({}).expect(201);
     expect([first.body.fillSequence, second.body.fillSequence]).toEqual([1, 1]);
+
+    // Totals per status, and paging through the open refills without overlap.
+    const sum = await api().get('/api/v1/refills/summary').query({ facilityId: 'FAC-1' }).set(PHARMACIST).expect(200);
+    expect(sum.body.open).toBe(sum.body.counts.UPCOMING + sum.body.counts.DUE + sum.body.counts.OVERDUE);
+    const all = await api().get('/api/v1/refills').query({ facilityId: 'FAC-1' }).set(PHARMACIST).expect(200);
+    expect(all.body).toHaveLength(sum.body.open);
+    const p1 = await api().get('/api/v1/refills').query({ facilityId: 'FAC-1', limit: 1, offset: 0 }).set(PHARMACIST).expect(200);
+    const p2 = await api().get('/api/v1/refills').query({ facilityId: 'FAC-1', limit: 1, offset: 1 }).set(PHARMACIST).expect(200);
+    expect([p1.body[0].id, p2.body[0].id]).toEqual(all.body.slice(0, 2).map((r: { id: string }) => r.id));
+    await api().get('/api/v1/refills').query({ limit: 501 }).set(PHARMACIST).expect(400);
+    await api().get('/api/v1/refills').query({ status: 'LATE' }).set(PHARMACIST).expect(400);
     // A cancelled refill can be requested again.
     await api().post(`/api/v1/dispensing/orders/${first.body.id}/cancel`).set(PHARMACIST).send({ reason: 'Patient did not come' }).expect(200);
     const again = await api().post(`/api/v1/refills/${schedules[0]!.id}/request`).set(PHARMACIST).send({}).expect(201);
@@ -329,6 +343,11 @@ run('PharmTrack end-to-end', () => {
     const entry = reg.body.entries.find((e: { patientId: string }) => e.patientId === 'PAT-4');
     expect(entry).toMatchObject({ hptCode: 'SAMPLE-HPT-0006', quantity: 12, quantityReturned: 0, dispensedBy: 'u-pharm-1', witnessedBy: 'u-pharm-2', storeId: expect.any(String) });
     expect(reg.body.totals.find((t: { hptCode: string }) => t.hptCode === 'SAMPLE-HPT-0006')).toMatchObject({ issued: 12, net: 12 });
+    // Entries page; the totals still cover the whole period.
+    const one = await api().get('/api/v1/reports/controlled-drugs').query({ facilityId: 'FAC-1', limit: 1 }).set(PHARMACIST).expect(200);
+    expect(one.body.entries).toHaveLength(1);
+    expect(one.body.total).toBe(reg.body.total);
+    expect(one.body.totals).toEqual(reg.body.totals);
     await api().get('/api/v1/reports/controlled-drugs').query({ facilityId: 'FAC-OTHER' }).set(PHARMACIST).expect(200)
       .then((r) => expect(r.body.entries).toHaveLength(0));
     const csv = await api().get('/api/v1/reports/controlled-drugs').query({ facilityId: 'FAC-1', format: 'csv' }).set(PHARMACIST).expect(200);

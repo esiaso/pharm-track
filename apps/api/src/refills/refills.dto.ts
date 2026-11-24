@@ -1,4 +1,6 @@
-import { IsBoolean, IsIn, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { RefillStatus } from '@prisma/client';
+import { Type } from 'class-transformer';
+import { IsBoolean, IsEnum, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min, MinLength } from 'class-validator';
 
 export class RequestRefillDto {
   @IsOptional() @IsIn(['STAT', 'URGENT', 'ROUTINE']) priority?: 'STAT' | 'URGENT' | 'ROUTINE';
@@ -33,4 +35,14 @@ export class DeliveryReportDto {
   @IsString() providerMessageId: string;
   @IsIn(['DELIVERED', 'FAILED']) status: 'DELIVERED' | 'FAILED';
   @IsOptional() @IsString() error?: string;
+}
+
+export class RefillListQuery {
+  @IsOptional() @IsString() facilityId?: string;
+  @IsOptional() @IsString() patientId?: string;
+  @IsOptional() @IsEnum(RefillStatus) status?: RefillStatus;
+  /** Page size, 1 to 500. Default 500. */
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(500) limit?: number;
+  /** Rows to skip, for paging. */
+  @IsOptional() @Type(() => Number) @IsInt() @Min(0) offset?: number;
 }
