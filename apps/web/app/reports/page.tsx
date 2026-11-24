@@ -34,13 +34,13 @@ type StockOut = { storeId: string; hptCode: string; genericName: string | null; 
 type Indicators = { encounters: number; items: number; avgMedicinesPerEncounter: number; pctEncountersWithAntibiotic: number; pctEncountersWithInjection: number; pctItemsOnFormulary: number; pctEncountersWithAntimicrobial: number; overridesPer100Items: number };
 type Prescribing = { facility: Indicators; prescribers: ({ prescriberId: string } & Indicators)[] };
 type AdherenceRow = { scheduleId: string; patientId: string; hptCode: string; genericName: string; strength: string; fills: number; daysOfSupplyPerFill: number; observedDays: number; pdc: number; adherent: boolean; lateRefills: number; averageDaysLate: number; status: string };
-type AdherenceReport = { threshold: number; summary: { items: number; patients: number; medianPdc: number | null; pctAdherent: number; lateRefills: number; overdueNow: number }; rows: AdherenceRow[] };
+type AdherenceReport = { threshold: number; totalRows: number; summary: { items: number; patients: number; medianPdc: number | null; pctAdherent: number; lateRefills: number; overdueNow: number }; rows: AdherenceRow[] };
 type RegisterEntry = {
   id: string; recordedAt: string; storeId: string; drugId: string; hptCode: string; genericName: string; strength: string; unitOfIssue: string; schedule: string;
   patientId: string; prescriptionRef: string; prescriberId: string; orderId: string; batchNumber: string; quantity: number; quantityReturned: number; dispensedBy: string; witnessedBy: string;
 };
 type RegisterTotal = { drugId: string; hptCode: string; genericName: string; strength: string; unitOfIssue: string; schedule: string; entries: number; issued: number; returned: number; net: number };
-type Register = { entries: RegisterEntry[]; totals: RegisterTotal[]; truncated: boolean };
+type Register = { entries: RegisterEntry[]; totals: RegisterTotal[]; total: number; truncated: boolean };
 type AdrRow = { id: string; patientId: string; seriousness: string; description: string; reportedAt: string; reportedBy: string; ppbReportStatus: string; dueBy: string; overdue: boolean; drug: { genericName: string; strength: string; hptCode: string } };
 type AdrQueue = { targets: { serious: number; nonSerious: number }; pending: AdrRow[]; counts: { pending: number; overdue: number; submitted: number; acknowledged: number } };
 
@@ -353,6 +353,23 @@ function StockOutsTab() {
   );
 }
 
+const REPORT_PAGE = 200;
+
+/** Previous/next for a report table; totals and CSV downloads cover every row. */
+function Pager({ page, setPage, shown, total, what }: { page: number; setPage: (p: number) => void; shown: number; total: number; what: string }) {
+  if (total <= REPORT_PAGE) return null;
+  const pages = Math.ceil(total / REPORT_PAGE);
+  return (
+    <div className="row pager">
+      <span className="muted small">Showing {(page * REPORT_PAGE + 1).toLocaleString()} to {(page * REPORT_PAGE + shown).toLocaleString()} of {total.toLocaleString()} {what}. The CSV has them all.</span>
+      <span className="spacer" />
+      <button onClick={() => setPage(page - 1)} disabled={page === 0}>Previous</button>
+      <span className="small">Page {page + 1} of {pages.toLocaleString()}</span>
+      <button onClick={() => setPage(page + 1)} disabled={page + 1 >= pages}>Next</button>
+    </div>
+  );
+}
+
 // ── Refill adherence ──────────────────────────────────────────────────────
 
 const pct = (v: number | null) => (v === null ? '–' : `${Math.round(v * 1000) / 10}%`);
@@ -361,14 +378,16 @@ function AdherenceTab() {
   const { session } = useSession();
   const range = useRange(90);
   const [onlyBelow, setOnlyBelow] = useState(false);
+  const [page, setPage] = useState(0);
   const path = `/reports/adherence?facilityId=${encodeURIComponent(session.facilityId)}&${range.query}`;
-  const { data, error } = useApi<AdherenceReport>(path);
+  useEffect(() => setPage(0), [path]);
+  const { data, error } = useApi<AdherenceReport>(`${path}&limit=${REPORT_PAGE}&offset=${page * REPORT_PAGE}`);
   const [dlError, setDlError] = useState<string | null>(null);
   const rows = data ? (onlyBelow ? data.rows.filter((r) => !r.adherent) : data.rows) : [];
   return (
     <div className="stack">
       <p className="small muted">
-        Refill timeliness for medicines with refills at {session.facilityId}. Days covered (PDC) is the share of days in the period the patient had supply, counted from the first fill and stopping when the course ends. {data ? pct(data.threshold) : '80%'} or more counts as adherent. A late refill is one collected after the grace days.
+        Refill timeliness for medicines with refills at {session.facilityId}. Days covered (PDC) is the share of days in the period the patient had supply, counted from the first fill and stopping when the course ends. {data ? pct(data.threshold) : '80%'} or more counts as adherent. A late refill is one collected after the grace days. Figures can be up to 5 minutes old.
       </p>
       <div className="row">
         {range.inputs}
@@ -408,6 +427,7 @@ function AdherenceTab() {
               </table>
             </div>
           )}
+          <Pager page={page} setPage={setPage} shown={data.rows.length} total={data.totalRows} what="medicines, lowest coverage first" />
         </>
       )}
     </div>
@@ -423,9 +443,11 @@ function ControlledTab() {
   const [drugId, setDrugId] = useState('');
   const base = `/reports/controlled-drugs?facilityId=${encodeURIComponent(session.facilityId)}&${range.query}${storeId ? `&storeId=${encodeURIComponent(storeId)}` : ''}`;
   const path = `${base}${drugId ? `&drugId=${encodeURIComponent(drugId)}` : ''}`;
-  const { data, error } = useApi<Register>(path);
-  // Drug choices come from the unfiltered period, so picking one doesn't empty the list.
-  const all = useApi<Register>(base);
+  const [page, setPage] = useState(0);
+  useEffect(() => setPage(0), [path]);
+  const { data, error } = useApi<Register>(`${path}&limit=${REPORT_PAGE}&offset=${page * REPORT_PAGE}`);
+  // Drug choices come from the unfiltered period's totals, so picking one doesn't empty the list.
+  const all = useApi<Register>(`${base}&limit=1`);
   const [dlError, setDlError] = useState<string | null>(null);
   return (
     <div className="stack">
@@ -444,8 +466,7 @@ function ControlledTab() {
         <button onClick={() => download(`${path}&format=csv`, 'controlled-drug-register.csv').catch((e) => setDlError((e as Error).message))}>Download CSV</button>
       </div>
       <ErrorBox error={error ?? dlError} />
-      {data && data.truncated && <p className="small">Only the first 5,000 entries are shown. Choose a shorter period or one drug.</p>}
-      {data && (data.entries.length === 0 ? <Empty>No controlled drugs were dispensed in this period.</Empty> : (
+      {data && (data.total === 0 ? <Empty>No controlled drugs were dispensed in this period.</Empty> : (
         <>
           <div className="table-wrap">
             <table aria-label="Totals by drug">
@@ -485,6 +506,7 @@ function ControlledTab() {
               </tbody>
             </table>
           </div>
+          <Pager page={page} setPage={setPage} shown={data.entries.length} total={data.total} what="entries" />
         </>
       ))}
     </div>

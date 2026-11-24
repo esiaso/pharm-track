@@ -105,18 +105,18 @@ export function proportionOfDaysCovered(
   const end = startOfDay(periodEnd).getTime();
   const totalDays = Math.round((end - start) / 86_400_000) + 1;
   if (totalDays <= 0) return 0;
-  const covered = new Set<number>();
-  // Carry over: a refill collected early extends coverage from the end of the previous supply.
+  // Fills make back-to-back segments (an early refill starts where the last
+  // supply ends), so they never overlap: add up each segment's days in range.
+  const DAY = 86_400_000;
+  let covered = 0;
   let cursor = 0;
   for (const f of [...fills].sort((a, b) => a.dispensedAt.getTime() - b.dispensedAt.getTime())) {
     const from = Math.max(startOfDay(f.dispensedAt).getTime(), cursor);
-    for (let i = 0; i < f.daysOfSupply; i++) {
-      const day = from + i * 86_400_000;
-      if (day >= start && day <= end) covered.add(day);
-    }
-    cursor = from + f.daysOfSupply * 86_400_000;
+    const to = from + f.daysOfSupply * DAY; // exclusive
+    covered += Math.max(0, Math.round((Math.min(to, end + DAY) - Math.max(from, start)) / DAY));
+    cursor = to;
   }
-  return covered.size / totalDays;
+  return covered / totalDays;
 }
 
 /** PDC at or above this counts as adherent (the usual 80% threshold). */

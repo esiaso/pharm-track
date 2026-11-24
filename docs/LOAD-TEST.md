@@ -81,15 +81,69 @@ ran on a 4-core machine with PostgreSQL on the same host.
   prescription date, alert date, register date) and for per-item fill history.
   This is migration `20261123201000_report_indexes`.
 
+## Many users at once
+
+`apps/api/scripts/load/concurrent.mjs` simulates pharmacy staff using the
+app together. Each user waits 0.5 to 2 seconds between clicks. The mix of
+calls is:
+
+| Share | What |
+|---:|---|
+| 30% | Dispensing queue |
+| 10% | Refill summary |
+| 12% | Refill list page |
+| 10% | Refill detail |
+| 12% | Order detail |
+| 10% | Medication history |
+| 8% | Patient allergies |
+| 4% | Consumption report |
+| 2% | Adherence report |
+| 2% | Controlled-drug report |
+
+```bash
+node apps/api/scripts/load/concurrent.mjs http://localhost:3000/api/v1 50 45   # 50 users, 45 seconds
+```
+
+These are the results at FAC-1 for one API process with PostgreSQL on the same 4-core machine:
+
+| Users | Requests/s | p50 | p95 | p99 | Errors |
+|---:|---:|---:|---:|---:|---:|
+| 25 | 19 | 13 ms | 238 ms | 695 ms | 0 |
+| 50, before | 36 | 26 ms | 503 ms | 1,088 ms | 0 |
+| 50, after | 38 | 11 ms | 214 ms | 552 ms | 0 |
+| 50, no reports | 39 | 8 ms | 65 ms | 298 ms | 0 |
+
+The API runs in one Node.js thread, so a report that takes a second of work
+holds up everyone's clicks meanwhile. With the reports left out, 50 users
+get a p95 of 65 ms. The changes:
+
+- **The adherence report** had a hidden 5,000-item cap. Above it, a busy
+  facility's figures covered an arbitrary subset of its patients. It now
+  counts every medicine whose course overlaps the period: 52,994 at FAC-1
+  for 90 days.
+  - Fill dates come from one query, and the PDC sum adds up date ranges
+    instead of marking each day. A test checks the result against the
+    day-by-day count.
+  - The table pages 200 rows, lowest coverage first. The summary and the CSV
+    cover every item.
+  - Results are kept for 5 minutes per facility and period, so paging and
+    other users don't redo the work. The screen says the figures can be up to
+    5 minutes old. The first load takes about 2 seconds at FAC-1.
+- **The controlled-drug register** sums its totals in the database and pages
+  its entries 200 at a time. The CSV holds up to 50,000 entries. The report
+  went from 387 ms to 107 ms, and from 1.8 MB to 113 KB.
+
 ## Still to watch
 
-- The adherence and controlled-drug reports return 1 to 2 MB for a busy
-  facility at their default periods. They are fast enough, but a longer period
-  or a whole hospital group would want paging.
+- ~~The adherence and controlled-drug reports return 1 to 2 MB.~~ Fixed: they
+  page (see above).
 - ~~The refill queues show the first 500.~~ Fixed. The Refills screen pages
   100 at a time and shows the total for each status. It can also find one
   patient's refills. The overview's due and overdue counts come from
   `GET /refills/summary`, so they are exact, not capped at 500. At FAC-1 that
   is 6,794 overdue, or 68 pages.
-- These timings are for one user. The API was not tested under many users at
-  once, and the rate limit is per API process.
+- At more than about 50 staff on one facility's reports at the same time, run
+  two API processes behind the proxy (`JOBS_ENABLED=false` on all but one). The
+  rate limit and the adherence cache are per process.
+- PostgreSQL's JIT compiler adds about 0.2 s to the adherence query and helps
+  nothing here. Consider `jit = off` on the database server.
