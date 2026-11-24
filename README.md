@@ -11,6 +11,7 @@ SMS reminders.
 - Integration contracts: [CliniTrack](docs/api/clinitrack-contract.md) · [SupplyTrack](docs/api/supplytrack-contract.md) · [OpenAPI](docs/api/openapi.json)
 - FHIR R4 facade: [docs/FHIR.md](docs/FHIR.md) · Data protection review: [docs/DATA-PROTECTION.md](docs/DATA-PROTECTION.md)
 - Deployment (Docker, settings, Zebra printers): [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
+- Load test (a year of data, timings, how to rerun): [docs/LOAD-TEST.md](docs/LOAD-TEST.md)
 
 ## Stack
 

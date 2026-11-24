@@ -43,14 +43,21 @@ export class ReportsService {
 
   /** Consumption by drug, coded by ATC and HPT, with WHO DDDs where they can be computed. */
   async consumption(filter: Period) {
-    const lines = await this.prisma.dispenseLine.findMany({
-      where: { dispensedAt: { gte: filter.from, lt: filter.to }, dispenseOrder: { facilityId: filter.facilityId } },
-      include: { drug: { include: { atc: true } }, dispenseOrder: { select: { kind: true } } },
-    });
+    // Summed in the database: a busy facility dispenses tens of thousands of lines a month.
+    const sums = await this.prisma.$queryRaw<{ hptCode: string; atcCode: string; drugId: string; kind: string; quantity: Prisma.Decimal; value: Prisma.Decimal }[]>`
+      SELECT l."hptCode", l."atcCode", l."drugId", o.kind::text AS kind,
+             SUM(l.quantity - l."quantityReturned") AS quantity,
+             SUM((l.quantity - l."quantityReturned") * l."unitPrice") AS value
+      FROM "DispenseLine" l JOIN "DispenseOrder" o ON o.id = l."dispenseOrderId"
+      WHERE l."dispensedAt" >= ${filter.from} AND l."dispensedAt" < ${filter.to}
+        AND (${filter.facilityId ?? null}::text IS NULL OR o."facilityId" = ${filter.facilityId ?? null})
+      GROUP BY l."hptCode", l."atcCode", l."drugId", o.kind
+      ORDER BY l."hptCode", l."atcCode", l."drugId", o.kind`;
+    const drugs = new Map((await this.prisma.drug.findMany({ where: { id: { in: [...new Set(sums.map((r) => r.drugId))] } } })).map((d) => [d.id, d]));
+    const lines = sums.map((r) => ({ ...r, drug: drugs.get(r.drugId)!, qty: num(r.quantity)!, val: num(r.value)! }));
     type Row = { hptCode: string; atcCode: string; genericName: string; strength: string; unitOfIssue: string; quantity: number; refillQuantity: number; value: number; ddds: number | null; antimicrobial: boolean };
     const byDrug = new Map<string, Row>();
     for (const l of lines) {
-      const qty = num(l.quantity)! - num(l.quantityReturned)!;
       const d = l.drug;
       const row = byDrug.get(l.hptCode) ?? {
         hptCode: l.hptCode,
@@ -64,9 +71,9 @@ export class ReportsService {
         ddds: null,
         antimicrobial: isAntimicrobial(l.atcCode),
       };
-      row.quantity += qty;
-      row.value = round(row.value + qty * num(l.unitPrice)!, 2);
-      if (l.dispenseOrder.kind === 'REFILL') row.refillQuantity += qty;
+      row.quantity += l.qty;
+      row.value = round(row.value + l.val, 2);
+      if (l.kind === 'REFILL') row.refillQuantity += l.qty;
       byDrug.set(l.hptCode, row);
     }
     // DDDs on the net quantity, using the ATC code on the line (as dispensed).
@@ -239,7 +246,11 @@ export class ReportsService {
   async prescribing(filter: Period) {
     const rx = await this.prisma.prescription.findMany({
       where: { signedAt: { gte: filter.from, lt: filter.to }, facilityId: filter.facilityId, status: { not: 'CANCELLED' } },
-      include: { items: { include: { drug: true, safetyAlerts: { where: { stage: 'PRESCRIBING', overrideReason: { not: null } }, select: { id: true } } } } },
+      select: {
+        prescriberId: true,
+        facilityId: true,
+        items: { select: { drugId: true, atcCode: true, route: true, drug: { select: { formularyStatus: true } }, safetyAlerts: { where: { stage: 'PRESCRIBING', overrideReason: { not: null } }, select: { id: true } } } },
+      },
     });
     const drugIds = [...new Set(rx.flatMap((p) => p.items.map((i) => i.drugId)))];
     const entries = await this.prisma.facilityFormulary.findMany({ where: { drugId: { in: drugIds }, facilityId: filter.facilityId ? filter.facilityId : { in: [...new Set(rx.map((p) => p.facilityId))] } } });
@@ -439,6 +450,24 @@ export class ReportsService {
     return { filename: name, csv: stockOutCsv(data.items) };
   }
 
+  /**
+   * ADRs reported in the period on medicines this facility dispensed, by
+   * seriousness. Starts from the (few) ADRs, not the facility's lines: a busy
+   * facility has more lines than one query can list.
+   */
+  private async adrsAtFacility(facilityId: string, range: { from: Date; to: Date }) {
+    const adrs = await this.prisma.adverseDrugReaction.findMany({
+      where: { reportedAt: { gte: range.from, lt: range.to }, dispenseLineId: { not: null } },
+      select: { seriousness: true, dispenseLineId: true },
+    });
+    const ours = new Set(
+      (await this.prisma.dispenseLine.findMany({ where: { id: { in: adrs.map((a) => a.dispenseLineId!) }, dispenseOrder: { facilityId } }, select: { id: true } })).map((l) => l.id),
+    );
+    const counts = new Map<string, number>();
+    for (const a of adrs) if (ours.has(a.dispenseLineId!)) counts.set(a.seriousness, (counts.get(a.seriousness) ?? 0) + 1);
+    return [...counts].map(([seriousness, n]) => ({ seriousness, _count: { _all: n } }));
+  }
+
   private async buildPharmacyReturn(facilityId: string, range: { from: Date; to: Date }) {
     const filter = { facilityId, ...range };
     const [consumption, antimicrobials] = await Promise.all([this.consumption(filter), this.antimicrobialUse(filter)]);
@@ -450,11 +479,7 @@ export class ReportsService {
       this.prisma.dispenseOrder.count({ where: { facilityId, kind: 'REFILL', lines: { some: { dispensedAt: { gte: range.from, lt: range.to } } } } }),
       this.prisma.refillSchedule.count({ where: { facilityId, createdAt: { gte: range.from, lt: range.to } } }),
       this.prisma.refillSchedule.count({ where: { facilityId, status: 'OVERDUE' } }),
-      this.prisma.adverseDrugReaction.groupBy({
-        by: ['seriousness'],
-        where: { reportedAt: { gte: range.from, lt: range.to }, dispenseLineId: { in: (await this.prisma.dispenseLine.findMany({ where: { dispenseOrder: { facilityId } }, select: { id: true } })).map((l) => l.id) } },
-        _count: { _all: true },
-      }),
+      this.adrsAtFacility(facilityId, range),
       this.prisma.dispenseLine.findMany({
         where: { ...lineWhere, OR: [{ drug: { atc: { retiredInRelease: { not: null } } } }, { drug: { hpt: { retiredInRelease: { not: null } } } }] },
         distinct: ['hptCode'],

@@ -283,6 +283,33 @@ run('PharmTrack end-to-end', () => {
     expect(await prisma.patientAccessLog.count({ where: { patientId: 'PAT-1', action: 'reports.adherence' } })).toBe(2);
   });
 
+  it('refills two medicines on the same prescription, and re-requests a cancelled refill', async () => {
+    const rx = await api().post('/api/v1/prescriptions').set(SYSTEM)
+      .send(prescription({
+        patientId: 'PAT-7',
+        items: [
+          { ref: 'L1', hptCode: 'SAMPLE-HPT-0002', atcCode: 'A10BA02', dose: 500, doseUnit: 'mg', frequency: 'BD', frequencyPerDay: 2, route: 'ORAL', durationDays: 30, quantity: 60, refills: 2 },
+          { ref: 'L2', hptCode: 'SAMPLE-HPT-0007', atcCode: 'C08CA01', dose: 5, doseUnit: 'mg', frequency: 'OD', frequencyPerDay: 1, route: 'ORAL', durationDays: 30, quantity: 30, refills: 2 },
+        ],
+      }))
+      .expect(201);
+    const id = rx.body.dispenseOrders[0].id;
+    await api().post(`/api/v1/dispensing/orders/${id}/verify`).set(PHARMACIST).send({}).expect(200);
+    await api().post(`/api/v1/dispensing/orders/${id}/dispense`).set(PHARMACIST)
+      .send({ lines: rx.body.items.map((i: { id: string; quantity: string }) => ({ prescriptionItemId: i.id, quantity: Number(i.quantity) })) })
+      .expect(200);
+    const schedules = await prisma.refillSchedule.findMany({ where: { patientId: 'PAT-7' } });
+    expect(schedules).toHaveLength(2);
+    // Both medicines' first refill: each is fill 1 of its own item.
+    const first = await api().post(`/api/v1/refills/${schedules[0]!.id}/request`).set(PHARMACIST).send({}).expect(201);
+    const second = await api().post(`/api/v1/refills/${schedules[1]!.id}/request`).set(PHARMACIST).send({}).expect(201);
+    expect([first.body.fillSequence, second.body.fillSequence]).toEqual([1, 1]);
+    // A cancelled refill can be requested again.
+    await api().post(`/api/v1/dispensing/orders/${first.body.id}/cancel`).set(PHARMACIST).send({ reason: 'Patient did not come' }).expect(200);
+    const again = await api().post(`/api/v1/refills/${schedules[0]!.id}/request`).set(PHARMACIST).send({}).expect(201);
+    expect(again.body).toMatchObject({ fillSequence: 1, kind: 'REFILL' });
+  });
+
   it('requires a different witness for controlled drugs', async () => {
     const rx = await api().post('/api/v1/prescriptions').set(SYSTEM)
       .send(prescription({ patientId: 'PAT-4', items: [{ ref: 'L1', hptCode: 'SAMPLE-HPT-0006', atcCode: 'N02AA01', dose: 10, doseUnit: 'mg', frequency: 'Q4H', frequencyPerDay: 6, route: 'ORAL', durationDays: 2, quantity: 12 }] }))
@@ -342,7 +369,8 @@ run('PharmTrack end-to-end', () => {
   it('reports consumption coded by ATC and HPT', async () => {
     const res = await api().get('/api/v1/reports/consumption?facilityId=FAC-1').set(PHARMACIST).expect(200);
     const met = res.body.find((r: any) => r.hptCode === 'SAMPLE-HPT-0002');
-    expect(met).toMatchObject({ atcCode: 'A10BA02', quantity: 120, refillQuantity: 60 });
+    // PAT-1's first fill and refill, plus PAT-7's first fill (the two-medicine refill test).
+    expect(met).toMatchObject({ atcCode: 'A10BA02', quantity: 180, refillQuantity: 60 });
     const amr = await api().get('/api/v1/reports/antimicrobial-use?facilityId=FAC-1').set(PHARMACIST).expect(200);
     expect(amr.body).toEqual([{ atcClass: 'J01CA', quantity: 14, ddds: null, productsWithoutDdd: 1 }]); // no WHO DDD loaded in the sample data
   });

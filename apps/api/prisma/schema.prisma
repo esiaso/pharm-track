@@ -492,6 +492,7 @@ model Prescription {
 
   @@index([patientId])
   @@index([facilityId, status])
+  @@index([signedAt])
 }
 
 enum PrescriptionStatus {
@@ -544,6 +545,7 @@ model SafetyAlert {
   raisedAt             DateTime         @default(now())
 
   @@index([prescriptionItemId])
+  @@index([raisedAt])
 }
 
 enum SafetyStage {
@@ -589,7 +591,11 @@ model DispenseOrder {
   updatedAt        DateTime         @updatedAt
   lines            DispenseLine[]
 
-  @@unique([prescriptionId, fillSequence])
+  /// fillSequence counts fills of one item (0 is the initial fill), so it is not
+  /// unique per prescription: two medicines on refill both have a fill 1, and a
+  /// cancelled refill is requested again with the same number.
+  @@index([prescriptionId])
+  @@index([refillScheduleId])
   @@index([storeId, status, priority])
 }
 
@@ -645,6 +651,8 @@ model DispenseLine {
   controlledEntry       ControlledDrugRegisterEntry?
 
   @@index([dispenseOrderId])
+  @@index([dispensedAt])
+  @@index([prescriptionItemId])
 }
 
 enum BillingStatus {
@@ -667,6 +675,8 @@ model ControlledDrugRegisterEntry {
   dispensedBy    String
   witnessedBy    String
   recordedAt     DateTime     @default(now())
+
+  @@index([recordedAt])
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -772,6 +782,7 @@ model Notification {
 
   @@index([status, scheduledFor])
   @@index([patientId])
+  @@index([refillScheduleId])
 }
 
 enum NotificationChannel {
