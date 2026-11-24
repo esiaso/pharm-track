@@ -42,7 +42,7 @@ export async function receivePrescription(request: APIRequestContext, over: Reco
       storeId: 'STORE-1',
       signedAt: new Date().toISOString(),
       context: { ageMonths: 480, weightKg: 70, diagnoses: [{ system: 'ICD10', code: 'E11.9' }] },
-      items: [{ ref: 'L1', hptCode: 'SAMPLE-HPT-0002', atcCode: 'A10BA02', dose: 500, doseUnit: 'mg', frequency: 'BD', frequencyPerDay: 2, route: 'ORAL', durationDays: 30, quantity: 60, refills: 2 }],
+      items: [{ ref: 'L1', hptCode: 'GE10002', atcCode: 'A10BA02', dose: 500, doseUnit: 'mg', frequency: 'BD', frequencyPerDay: 2, route: 'ORAL', durationDays: 30, quantity: 60, refills: 2 }],
       ...over,
     },
   });

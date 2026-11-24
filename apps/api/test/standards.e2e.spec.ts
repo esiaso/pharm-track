@@ -91,7 +91,7 @@ run('FHIR facade and data protection end-to-end', () => {
     const created = await api().post('/api/v1/prescriptions').set(SYSTEM).send({
       externalId: 'CT-RX-F1', patientId: 'PAT-F1', encounterId: 'ENC-F1', prescriberId: 'DR-1', facilityId: 'FAC-1', storeId: 'STORE-1',
       signedAt: new Date().toISOString(), context: { ageMonths: 480, weightKg: 70 },
-      items: [{ ref: 'a', hptCode: 'SAMPLE-HPT-0002', atcCode: 'A10BA02', dose: 500, doseUnit: 'mg', frequency: 'BD', frequencyPerDay: 2, route: 'ORAL', durationDays: 30, quantity: 60, refills: 2 }],
+      items: [{ ref: 'a', hptCode: 'GE10002', atcCode: 'A10BA02', dose: 500, doseUnit: 'mg', frequency: 'BD', frequencyPerDay: 2, route: 'ORAL', durationDays: 30, quantity: 60, refills: 2 }],
     }).expect(201);
     rx = created.body;
     const orderId = rx.dispenseOrders[0].id;
@@ -99,7 +99,7 @@ run('FHIR facade and data protection end-to-end', () => {
     await api().post(`/api/v1/dispensing/orders/${orderId}/dispense`).set(PHARMACIST)
       .send({ lines: rx.items.map((i: any) => ({ prescriptionItemId: i.id, quantity: 60 })) }).expect(200);
     await api().post('/api/v1/adrs').set(PHARMACIST)
-      .send({ patientId: 'PAT-F1', hptCode: 'SAMPLE-HPT-0002', onsetDate: new Date().toISOString(), description: 'Nausea and vomiting', seriousness: 'NON_SERIOUS' })
+      .send({ patientId: 'PAT-F1', hptCode: 'GE10002', onsetDate: new Date().toISOString(), description: 'Nausea and vomiting', seriousness: 'NON_SERIOUS' })
       .expect(201);
     await prisma.patientAccessLog.deleteMany();
   });
@@ -138,7 +138,7 @@ run('FHIR facade and data protection end-to-end', () => {
 
     const medRef = req.medicationReference.reference as string;
     const med = await fhir(medRef).expect(200);
-    expect(med.body.code.coding.map((c: any) => c.code)).toEqual(['SAMPLE-HPT-0002', 'A10BA02']);
+    expect(med.body.code.coding.map((c: any) => c.code)).toEqual(['GE10002', 'A10BA02']);
 
     const byCode = await fhir('Medication?code=http://www.whocc.no/atc|A10BA02').expect(200);
     expect(byCode.body.total).toBe(1);
@@ -241,7 +241,7 @@ run('FHIR facade and data protection end-to-end', () => {
     await prisma.patientAccessLog.create({ data: { patientId: 'PAT-OLD', actorId: 'x', actorRole: 'PHARMACIST', action: 'allergies.read', path: '/x', at: ancient } });
     await prisma.auditLog.create({ data: { actorId: 'x', actorRole: 'PHARMACIST', action: 'allergy.create', entityType: 'Allergy', entityId: 'gone', at: ancient } });
     // A patient last seen 8 years ago: all of their records go. PAT-F1 (seen today) keeps everything.
-    const drug = await prisma.drug.findFirstOrThrow({ where: { hptCode: 'SAMPLE-HPT-0002' } });
+    const drug = await prisma.drug.findFirstOrThrow({ where: { hptCode: 'GE10002' } });
     await prisma.allergy.create({ data: { patientId: 'PAT-GONE', agentType: 'NON_DRUG', agentText: 'Latex', severity: 'MILD', recordedBy: 'x', recordedAt: ancient } });
     await prisma.adverseDrugReaction.create({ data: { patientId: 'PAT-GONE', drugId: drug.id, onsetDate: ancient, description: 'Old rash', seriousness: 'NON_SERIOUS', reportedBy: 'x', reportedAt: ancient } });
     await prisma.$executeRaw`UPDATE "Allergy" SET "updatedAt" = ${ancient} WHERE "patientId" = 'PAT-GONE'`;
@@ -369,7 +369,7 @@ run('FHIR facade and data protection end-to-end', () => {
       storeId: 'STORE-1',
       signedAt: new Date().toISOString(),
       context: { ageMonths: 480, weightKg: 70, diagnoses: [{ system: 'ICD10', code: 'K25.9' }] },
-      items: [{ ref: 'L1', hptCode: 'SAMPLE-HPT-0004', atcCode: 'M01AE01', dose: 400, doseUnit: 'mg', frequency: 'TDS', frequencyPerDay: 3, route: 'ORAL', durationDays: 3, quantity: 9 }],
+      items: [{ ref: 'L1', hptCode: 'GE10403', atcCode: 'M01AE01', dose: 400, doseUnit: 'mg', frequency: 'TDS', frequencyPerDay: 3, route: 'ORAL', durationDays: 3, quantity: 9 }],
       ...over,
     });
 

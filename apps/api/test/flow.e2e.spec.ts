@@ -113,8 +113,8 @@ run('PharmTrack end-to-end', () => {
     signedAt: new Date().toISOString(),
     context: { ageMonths: 480, weightKg: 70, diagnoses: [{ system: 'ICD10', code: 'E11.9' }] },
     items: [
-      { ref: 'L1', hptCode: 'SAMPLE-HPT-0002', atcCode: 'A10BA02', dose: 500, doseUnit: 'mg', frequency: 'BD', frequencyPerDay: 2, route: 'ORAL', durationDays: 30, quantity: 60, refills: 2 },
-      { ref: 'L2', hptCode: 'SAMPLE-HPT-0001', atcCode: 'J01CA04', dose: 500, doseUnit: 'mg', frequency: 'TDS', frequencyPerDay: 3, route: 'ORAL', durationDays: 7, quantity: 21 },
+      { ref: 'L1', hptCode: 'GE10002', atcCode: 'A10BA02', dose: 500, doseUnit: 'mg', frequency: 'BD', frequencyPerDay: 2, route: 'ORAL', durationDays: 30, quantity: 60, refills: 2 },
+      { ref: 'L2', hptCode: 'GE10160', atcCode: 'J01CA04', dose: 500, doseUnit: 'mg', frequency: 'TDS', frequencyPerDay: 3, route: 'ORAL', durationDays: 7, quantity: 21 },
     ],
     ...over,
   });
@@ -126,10 +126,10 @@ run('PharmTrack end-to-end', () => {
 
   it('searches the formulary by name, ATC class and HPT code', async () => {
     const byName = await api().get('/api/v1/formulary/drugs?q=amox').set(PHARMACIST).expect(200);
-    expect(byName.body.map((d: any) => d.hptCode)).toEqual(['SAMPLE-HPT-0001']);
+    expect(byName.body.map((d: any) => d.hptCode)).toEqual(['GE10160']);
     const byClass = await api().get('/api/v1/formulary/drugs?q=N02').set(PHARMACIST).expect(200);
     expect(byClass.body).toHaveLength(2);
-    const byHpt = await api().get('/api/v1/formulary/drugs/by-hpt/sample-hpt-0003').set(PHARMACIST).expect(200);
+    const byHpt = await api().get('/api/v1/formulary/drugs/by-hpt/ge10586').set(PHARMACIST).expect(200);
     expect(byHpt.body.atcHierarchy).toEqual(['B', 'B01', 'B01A', 'B01AA', 'B01AA03']);
   });
 
@@ -137,7 +137,7 @@ run('PharmTrack end-to-end', () => {
     await api().post('/api/v1/formulary/drugs').set(PHARMACIST)
       .send({ hptCode: 'SAMPLE-HPT-0099', atcCode: 'J01CA', genericName: 'Bad', strength: '1 mg', dosageForm: 'TABLET', route: 'ORAL', packSize: 1, unitOfIssue: 'TABLET' })
       .expect(400);
-    const drug = await api().get('/api/v1/formulary/drugs/by-hpt/SAMPLE-HPT-0004').set(PHARMACIST);
+    const drug = await api().get('/api/v1/formulary/drugs/by-hpt/GE10403').set(PHARMACIST);
     await api().patch(`/api/v1/formulary/drugs/${drug.body.id}`).set(PHARMACIST).send({ formularyStatus: 'RESTRICTED', reason: 'DTC decision' }).expect(200);
     const versions = await api().get(`/api/v1/formulary/drugs/${drug.body.id}/versions`).set(PHARMACIST).expect(200);
     expect(versions.body[0]).toMatchObject({ version: 2, reason: 'DTC decision' });
@@ -154,9 +154,9 @@ run('PharmTrack end-to-end', () => {
         patientId: 'PAT-2',
         context: { pregnant: true },
         items: [
-          { ref: 'a', hptCode: 'SAMPLE-HPT-0003', dose: 5, doseUnit: 'mg', frequencyPerDay: 1, route: 'ORAL' },
-          { ref: 'b', hptCode: 'SAMPLE-HPT-0004', dose: 400, doseUnit: 'mg', frequencyPerDay: 3, route: 'ORAL' },
-          { ref: 'c', hptCode: 'SAMPLE-HPT-0001', dose: 500, doseUnit: 'mg', frequencyPerDay: 3, route: 'ORAL' },
+          { ref: 'a', hptCode: 'GE10586', dose: 5, doseUnit: 'mg', frequencyPerDay: 1, route: 'ORAL' },
+          { ref: 'b', hptCode: 'GE10403', dose: 400, doseUnit: 'mg', frequencyPerDay: 3, route: 'ORAL' },
+          { ref: 'c', hptCode: 'GE10160', dose: 500, doseUnit: 'mg', frequencyPerDay: 3, route: 'ORAL' },
         ],
       })
       .expect(200);
@@ -168,7 +168,7 @@ run('PharmTrack end-to-end', () => {
   it('refuses a signed prescription with an unacknowledged warning, accepts it with an override', async () => {
     const body = prescription({
       patientId: 'PAT-3',
-      items: [{ ref: 'L1', hptCode: 'SAMPLE-HPT-0005', atcCode: 'N02BE01', dose: 1500, doseUnit: 'mg', frequency: 'QID', frequencyPerDay: 4, route: 'ORAL', durationDays: 3, quantity: 36 }],
+      items: [{ ref: 'L1', hptCode: 'GE10177', atcCode: 'N02BE01', dose: 1500, doseUnit: 'mg', frequency: 'QID', frequencyPerDay: 4, route: 'ORAL', durationDays: 3, quantity: 36 }],
     });
     const refused = await api().post('/api/v1/prescriptions').set(SYSTEM).send(body).expect(422);
     const keys = refused.body.unacknowledged.map((a: any) => a.key);
@@ -190,7 +190,7 @@ run('PharmTrack end-to-end', () => {
     expect(again.body.id).toBe(first.body.id);
     expect(first.body.dispenseOrders).toHaveLength(1);
     orderId = first.body.dispenseOrders[0].id;
-    scheduleId = first.body.items.find((i: any) => i.hptCode === 'SAMPLE-HPT-0002').refillSchedule.id;
+    scheduleId = first.body.items.find((i: any) => i.hptCode === 'GE10002').refillSchedule.id;
     const queue = await api().get('/api/v1/dispensing/queue?storeId=STORE-1').set(PHARMACIST).expect(200);
     expect(queue.body.map((o: any) => o.id)).toContain(orderId);
   });
@@ -200,8 +200,8 @@ run('PharmTrack end-to-end', () => {
     await api().post(`/api/v1/dispensing/orders/${orderId}/verify`).set(PHARMACIST).send({}).expect(200);
     const order = await api().get(`/api/v1/dispensing/orders/${orderId}`).set(PHARMACIST);
     const items = order.body.prescription.items;
-    const metformin = items.find((i: any) => i.hptCode === 'SAMPLE-HPT-0002');
-    const amox = items.find((i: any) => i.hptCode === 'SAMPLE-HPT-0001');
+    const metformin = items.find((i: any) => i.hptCode === 'GE10002');
+    const amox = items.find((i: any) => i.hptCode === 'GE10160');
 
     // Partial first: 21 amoxicillin only.
     const partial = await api().post(`/api/v1/dispensing/orders/${orderId}/dispense`).set(PHARMACIST)
@@ -215,7 +215,7 @@ run('PharmTrack end-to-end', () => {
       .send({ lines: [{ prescriptionItemId: metformin.id, quantity: 60 }] })
       .expect(200);
     expect(done.body.status).toBe('DISPENSED');
-    const metLines = done.body.lines.filter((l: any) => l.hptCode === 'SAMPLE-HPT-0002');
+    const metLines = done.body.lines.filter((l: any) => l.hptCode === 'GE10002');
     expect(metLines.map((l: any) => [l.batchNumber, Number(l.quantity)])).toEqual([['SOON', 50], ['LATE', 10]]);
 
     const delivered = await app.get(OutboxService).dispatchDue();
@@ -224,7 +224,7 @@ run('PharmTrack end-to-end', () => {
     const billing = clinitrack.events.filter((e) => e.type === 'dispense.completed');
     expect(billing).toHaveLength(2);
     expect(billing[1]!.payload).toMatchObject({ fillType: 'INITIAL', fillSequence: 0, prescriptionExternalId: rxBody.externalId });
-    expect(billing[1]!.payload.lines[0]).toMatchObject({ hptCode: 'SAMPLE-HPT-0002', atcCode: 'A10BA02', unitPrice: 10 });
+    expect(billing[1]!.payload.lines[0]).toMatchObject({ hptCode: 'GE10002', atcCode: 'A10BA02', unitPrice: 10 });
     const lines = await prisma.dispenseLine.findMany({ where: { dispenseOrderId: orderId } });
     expect(lines.every((l) => l.billingStatus === 'SENT' && l.billingRef)).toBe(true);
   });
@@ -291,8 +291,8 @@ run('PharmTrack end-to-end', () => {
       .send(prescription({
         patientId: 'PAT-7',
         items: [
-          { ref: 'L1', hptCode: 'SAMPLE-HPT-0002', atcCode: 'A10BA02', dose: 500, doseUnit: 'mg', frequency: 'BD', frequencyPerDay: 2, route: 'ORAL', durationDays: 30, quantity: 60, refills: 2 },
-          { ref: 'L2', hptCode: 'SAMPLE-HPT-0007', atcCode: 'C08CA01', dose: 5, doseUnit: 'mg', frequency: 'OD', frequencyPerDay: 1, route: 'ORAL', durationDays: 30, quantity: 30, refills: 2 },
+          { ref: 'L1', hptCode: 'GE10002', atcCode: 'A10BA02', dose: 500, doseUnit: 'mg', frequency: 'BD', frequencyPerDay: 2, route: 'ORAL', durationDays: 30, quantity: 60, refills: 2 },
+          { ref: 'L2', hptCode: 'GE10012', atcCode: 'C08CA01', dose: 5, doseUnit: 'mg', frequency: 'OD', frequencyPerDay: 1, route: 'ORAL', durationDays: 30, quantity: 30, refills: 2 },
         ],
       }))
       .expect(201);
@@ -326,7 +326,7 @@ run('PharmTrack end-to-end', () => {
 
   it('requires a different witness for controlled drugs', async () => {
     const rx = await api().post('/api/v1/prescriptions').set(SYSTEM)
-      .send(prescription({ patientId: 'PAT-4', items: [{ ref: 'L1', hptCode: 'SAMPLE-HPT-0006', atcCode: 'N02AA01', dose: 10, doseUnit: 'mg', frequency: 'Q4H', frequencyPerDay: 6, route: 'ORAL', durationDays: 2, quantity: 12 }] }))
+      .send(prescription({ patientId: 'PAT-4', items: [{ ref: 'L1', hptCode: 'GE12856', atcCode: 'N02AA01', dose: 10, doseUnit: 'mg', frequency: 'Q4H', frequencyPerDay: 6, route: 'ORAL', durationDays: 2, quantity: 12 }] }))
       .expect(201);
     const id = rx.body.dispenseOrders[0].id;
     const itemId = rx.body.items[0].id;
@@ -341,8 +341,8 @@ run('PharmTrack end-to-end', () => {
     // The entry shows in the controlled-drug register, and reading it is logged against the patient.
     const reg = await api().get('/api/v1/reports/controlled-drugs').query({ facilityId: 'FAC-1' }).set(PHARMACIST).expect(200);
     const entry = reg.body.entries.find((e: { patientId: string }) => e.patientId === 'PAT-4');
-    expect(entry).toMatchObject({ hptCode: 'SAMPLE-HPT-0006', quantity: 12, quantityReturned: 0, dispensedBy: 'u-pharm-1', witnessedBy: 'u-pharm-2', storeId: expect.any(String) });
-    expect(reg.body.totals.find((t: { hptCode: string }) => t.hptCode === 'SAMPLE-HPT-0006')).toMatchObject({ issued: 12, net: 12 });
+    expect(entry).toMatchObject({ hptCode: 'GE12856', quantity: 12, quantityReturned: 0, dispensedBy: 'u-pharm-1', witnessedBy: 'u-pharm-2', storeId: expect.any(String) });
+    expect(reg.body.totals.find((t: { hptCode: string }) => t.hptCode === 'GE12856')).toMatchObject({ issued: 12, net: 12 });
     // Entries page; the totals still cover the whole period.
     const one = await api().get('/api/v1/reports/controlled-drugs').query({ facilityId: 'FAC-1', limit: 1 }).set(PHARMACIST).expect(200);
     expect(one.body.entries).toHaveLength(1);
@@ -361,23 +361,23 @@ run('PharmTrack end-to-end', () => {
 
   it('substitutes only within the substitution group, with a note', async () => {
     const rx = await api().post('/api/v1/prescriptions').set(SYSTEM)
-      .send(prescription({ patientId: 'PAT-5', items: [{ ref: 'L1', hptCode: 'SAMPLE-HPT-0007', atcCode: 'C08CA01', dose: 5, doseUnit: 'mg', frequency: 'OD', frequencyPerDay: 1, route: 'ORAL', durationDays: 30, quantity: 30 }] }))
+      .send(prescription({ patientId: 'PAT-5', items: [{ ref: 'L1', hptCode: 'GE10012', atcCode: 'C08CA01', dose: 5, doseUnit: 'mg', frequency: 'OD', frequencyPerDay: 1, route: 'ORAL', durationDays: 30, quantity: 30 }] }))
       .expect(201);
     const id = rx.body.dispenseOrders[0].id;
     const itemId = rx.body.items[0].id;
     await api().post(`/api/v1/dispensing/orders/${id}/verify`).set(PHARMACIST).send({}).expect(200);
     await api().post(`/api/v1/dispensing/orders/${id}/dispense`).set(PHARMACIST)
-      .send({ lines: [{ prescriptionItemId: itemId, quantity: 30, substituteHptCode: 'SAMPLE-HPT-0005', substitutionNote: 'Out of stock' }] })
+      .send({ lines: [{ prescriptionItemId: itemId, quantity: 30, substituteHptCode: 'GE10177', substitutionNote: 'Out of stock' }] })
       .expect(400);
     const ok = await api().post(`/api/v1/dispensing/orders/${id}/dispense`).set(PHARMACIST)
-      .send({ lines: [{ prescriptionItemId: itemId, quantity: 30, substituteHptCode: 'SAMPLE-HPT-0008', substitutionNote: 'Brand A out of stock' }] })
+      .send({ lines: [{ prescriptionItemId: itemId, quantity: 30, substituteHptCode: 'PH10348', substitutionNote: 'Generic out of stock' }] })
       .expect(200);
-    expect(ok.body.lines[0]).toMatchObject({ hptCode: 'SAMPLE-HPT-0008', substitutionNote: 'Brand A out of stock' });
+    expect(ok.body.lines[0]).toMatchObject({ hptCode: 'PH10348', substitutionNote: 'Generic out of stock' });
     expect(supply.reservations.filter((r) => r.released)).toHaveLength(0);
   });
 
   it('restocks returns in SupplyTrack and reverses the bill in CliniTrack', async () => {
-    const line = await prisma.dispenseLine.findFirstOrThrow({ where: { dispenseOrderId: orderId, hptCode: 'SAMPLE-HPT-0001' } });
+    const line = await prisma.dispenseLine.findFirstOrThrow({ where: { dispenseOrderId: orderId, hptCode: 'GE10160' } });
     await api().post(`/api/v1/dispensing/lines/${line.id}/returns`).set(PHARMACIST).send({ quantity: 30, reason: 'Too many' }).expect(400);
     await api().post(`/api/v1/dispensing/lines/${line.id}/returns`).set(PHARMACIST).send({ quantity: 7, reason: 'Course stopped by doctor' }).expect(201);
     await app.get(OutboxService).dispatchDue();
@@ -387,7 +387,7 @@ run('PharmTrack end-to-end', () => {
 
   it('reports consumption coded by ATC and HPT', async () => {
     const res = await api().get('/api/v1/reports/consumption?facilityId=FAC-1').set(PHARMACIST).expect(200);
-    const met = res.body.find((r: any) => r.hptCode === 'SAMPLE-HPT-0002');
+    const met = res.body.find((r: any) => r.hptCode === 'GE10002');
     // PAT-1's first fill and refill, plus PAT-7's first fill (the two-medicine refill test).
     expect(met).toMatchObject({ atcCode: 'A10BA02', quantity: 180, refillQuantity: 60 });
     const amr = await api().get('/api/v1/reports/antimicrobial-use?facilityId=FAC-1').set(PHARMACIST).expect(200);
@@ -409,14 +409,14 @@ run('PharmTrack end-to-end', () => {
 
   it('handles a SupplyTrack batch recall: lists affected patients and never dispenses the batch', async () => {
     const ev = await api().post('/api/v1/integrations/supplytrack/events').set(SYSTEM)
-      .send({ type: 'batch.recalled', payload: { hptCode: 'SAMPLE-HPT-0002', batchNumber: 'SOON', reason: 'Out of specification dissolution', recallClass: 'CLASS_II' } })
+      .send({ type: 'batch.recalled', payload: { hptCode: 'GE10002', batchNumber: 'SOON', reason: 'Out of specification dissolution', recallClass: 'CLASS_II' } })
       .expect(200);
     expect(ev.body.affectedPatients).toBeGreaterThan(0);
     const recall = await api().get(`/api/v1/integrations/recalls/${ev.body.recallId}`).set(PHARMACIST).expect(200);
     expect(recall.body.affected.map((a: any) => a.patientId)).toContain('PAT-1');
 
     const rx = await api().post('/api/v1/prescriptions').set(SYSTEM)
-      .send(prescription({ patientId: 'PAT-6', items: [{ ref: 'L1', hptCode: 'SAMPLE-HPT-0002', atcCode: 'A10BA02', dose: 500, doseUnit: 'mg', frequency: 'BD', frequencyPerDay: 2, route: 'ORAL', durationDays: 30, quantity: 60 }] }))
+      .send(prescription({ patientId: 'PAT-6', items: [{ ref: 'L1', hptCode: 'GE10002', atcCode: 'A10BA02', dose: 500, doseUnit: 'mg', frequency: 'BD', frequencyPerDay: 2, route: 'ORAL', durationDays: 30, quantity: 60 }] }))
       .expect(201);
     const id = rx.body.dispenseOrders[0].id;
     await api().post(`/api/v1/dispensing/orders/${id}/verify`).set(PHARMACIST).send({}).expect(200);
@@ -431,11 +431,11 @@ run('PharmTrack end-to-end', () => {
   });
 
   it('records stock-out alerts from SupplyTrack and rejects malformed events', async () => {
-    await api().post('/api/v1/integrations/supplytrack/events').set(SYSTEM).send({ type: 'stock.out', payload: { storeId: 'STORE-1', hptCode: 'SAMPLE-HPT-0007' } }).expect(200);
+    await api().post('/api/v1/integrations/supplytrack/events').set(SYSTEM).send({ type: 'stock.out', payload: { storeId: 'STORE-1', hptCode: 'GE10012' } }).expect(200);
     await api().post('/api/v1/integrations/supplytrack/events').set(SYSTEM).send({ type: 'stock.out', payload: { hptCode: 'X' } }).expect(400);
     await api().post('/api/v1/integrations/supplytrack/events').set(PHARMACIST).send({ type: 'stock.out', payload: {} }).expect(403);
     const alerts = await api().get('/api/v1/integrations/stock-alerts?storeId=STORE-1').set(PHARMACIST).expect(200);
-    expect(alerts.body).toEqual([expect.objectContaining({ hptCode: 'SAMPLE-HPT-0007', status: 'OUT' })]);
+    expect(alerts.body).toEqual([expect.objectContaining({ hptCode: 'GE10012', status: 'OUT' })]);
   });
 
   it('shows the integration queue and lets an administrator retry a dead message', async () => {

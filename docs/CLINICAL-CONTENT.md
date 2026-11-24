@@ -124,6 +124,10 @@ and load the next version.
   optional columns keep the current value. Each change goes through the normal
   path: a new version with the reason given, the audit log, and a
   `drug.upserted` event to CliniTrack's prescription pad.
+  CliniTrack prescribes by generic, so code each drug with its generic (`GE`)
+  HPT code: prescriptions are matched to drugs on that code. Put a branded
+  product (`PH`) that may be dispensed instead in the generic's substitution
+  group.
 
 ## Command line
 
