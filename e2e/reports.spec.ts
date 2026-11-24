@@ -7,7 +7,7 @@ test('a pharmacist reads the controlled-drug register and downloads it', async (
   // Morphine dispensed by one pharmacist and witnessed by another.
   const { orderId, externalId } = await receivePrescription(request, {
     patientId: 'PAT-CD',
-    items: [{ ref: 'L1', hptCode: 'SAMPLE-HPT-0006', atcCode: 'N02AA01', dose: 10, doseUnit: 'mg', frequency: 'Q4H', frequencyPerDay: 6, route: 'ORAL', durationDays: 2, quantity: 12 }],
+    items: [{ ref: 'L1', hptCode: 'GE12856', atcCode: 'N02AA01', dose: 10, doseUnit: 'mg', frequency: 'Q4H', frequencyPerDay: 6, route: 'ORAL', durationDays: 2, quantity: 12 }],
   });
   const order = await (await request.get(`${API}/dispensing/orders/${orderId}`, { headers: pharmacist('pharm-1') })).json();
   const itemId = order.prescription.items[0].id;

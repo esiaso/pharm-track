@@ -4,10 +4,12 @@ import { atcHierarchy, atcLevel } from '../domain/codes';
 /**
  * Sample reference data for development and tests.
  *
- * The ATC codes are real WHO ATC codes. The HPT codes are PLACEHOLDERS
- * ("SAMPLE-HPT-xxxx"), not real PPB codes: load the official PPB HPT list
- * through Clinical content → Code sets (POST /api/v1/content/code-sets/hpt/import)
- * for real use. The sample safety rules are format examples, not clinical guidance.
+ * The ATC codes are real WHO ATC codes and the HPT codes are real PPB codes
+ * (release of 16 October 2026). CliniTrack prescribes by generic, so each drug
+ * carries its generic (GE) code; the second amlodipine is a branded product (PH)
+ * in the same substitution group. Load the full PPB HPT list through Clinical
+ * content → Code sets for real use. The sample safety rules are format
+ * examples, not clinical guidance.
  */
 const ATC_NAMES: Record<string, string> = {
   A: 'Alimentary tract and metabolism', A10: 'Drugs used in diabetes', A10B: 'Blood glucose lowering drugs, excl. insulins', A10BA: 'Biguanides', A10BA02: 'metformin',
@@ -19,15 +21,39 @@ const ATC_NAMES: Record<string, string> = {
   N02B: 'Other analgesics and antipyretics', N02BE: 'Anilides', N02BE01: 'paracetamol',
 };
 
+/** Names as published in the PPB HPT list. */
+const HPT_NAMES: Record<string, string> = {
+  GE10160: 'Amoxicillin 500 mg Oral Capsule',
+  GE10002: 'Metformin 500 mg Oral Tablet',
+  GE10586: 'Warfarin 5 mg Oral Tablet',
+  GE10403: 'Ibuprofen 400 mg Oral Tablet',
+  GE10177: 'Paracetamol 500 mg Oral Tablet',
+  GE12856: 'Morphine 10 mg Oral Tablet',
+  GE10012: 'Amlodipine 5 mg Oral Tablet',
+  PH10348: 'Amlodeal 5 mg Oral Tablet',
+};
+const HPT_RELEASE = 'PPB-HPT-2026-10-16';
+/** Placeholder codes used before the real list was available; renamed on existing databases. */
+const OLD_SAMPLE_CODES: Record<string, string> = {
+  'SAMPLE-HPT-0001': 'GE10160',
+  'SAMPLE-HPT-0002': 'GE10002',
+  'SAMPLE-HPT-0003': 'GE10586',
+  'SAMPLE-HPT-0004': 'GE10403',
+  'SAMPLE-HPT-0005': 'GE10177',
+  'SAMPLE-HPT-0006': 'GE12856',
+  'SAMPLE-HPT-0007': 'GE10012',
+  'SAMPLE-HPT-0008': 'PH10348',
+};
+
 export const SAMPLE_DRUGS = [
-  { hptCode: 'SAMPLE-HPT-0001', atcCode: 'J01CA04', genericName: 'Amoxicillin', strength: '500 mg', strengthValue: 500, strengthUnit: 'mg', dosageForm: 'CAPSULE', route: 'ORAL', packSize: 100, unitOfIssue: 'CAPSULE', pregnancyRisk: 'SAFE' as const },
-  { hptCode: 'SAMPLE-HPT-0002', atcCode: 'A10BA02', genericName: 'Metformin', strength: '500 mg', strengthValue: 500, strengthUnit: 'mg', dosageForm: 'TABLET', route: 'ORAL', packSize: 100, unitOfIssue: 'TABLET' },
-  { hptCode: 'SAMPLE-HPT-0003', atcCode: 'B01AA03', genericName: 'Warfarin', strength: '5 mg', strengthValue: 5, strengthUnit: 'mg', dosageForm: 'TABLET', route: 'ORAL', packSize: 28, unitOfIssue: 'TABLET', pregnancyRisk: 'CONTRAINDICATED' as const },
-  { hptCode: 'SAMPLE-HPT-0004', atcCode: 'M01AE01', genericName: 'Ibuprofen', strength: '400 mg', strengthValue: 400, strengthUnit: 'mg', dosageForm: 'TABLET', route: 'ORAL', packSize: 100, unitOfIssue: 'TABLET' },
-  { hptCode: 'SAMPLE-HPT-0005', atcCode: 'N02BE01', genericName: 'Paracetamol', strength: '500 mg', strengthValue: 500, strengthUnit: 'mg', dosageForm: 'TABLET', route: 'ORAL', packSize: 100, unitOfIssue: 'TABLET' },
-  { hptCode: 'SAMPLE-HPT-0006', atcCode: 'N02AA01', genericName: 'Morphine', strength: '10 mg', strengthValue: 10, strengthUnit: 'mg', dosageForm: 'TABLET', route: 'ORAL', packSize: 30, unitOfIssue: 'TABLET', controlledSchedule: 'SCHEDULE_2' as const },
-  { hptCode: 'SAMPLE-HPT-0007', atcCode: 'C08CA01', genericName: 'Amlodipine', strength: '5 mg', strengthValue: 5, strengthUnit: 'mg', dosageForm: 'TABLET', route: 'ORAL', packSize: 30, unitOfIssue: 'TABLET', brandNames: ['Brand A'] },
-  { hptCode: 'SAMPLE-HPT-0008', atcCode: 'C08CA01', genericName: 'Amlodipine', strength: '5 mg', strengthValue: 5, strengthUnit: 'mg', dosageForm: 'TABLET', route: 'ORAL', packSize: 30, unitOfIssue: 'TABLET', brandNames: ['Brand B'] },
+  { hptCode: 'GE10160', atcCode: 'J01CA04', genericName: 'Amoxicillin', strength: '500 mg', strengthValue: 500, strengthUnit: 'mg', dosageForm: 'CAPSULE', route: 'ORAL', packSize: 100, unitOfIssue: 'CAPSULE', pregnancyRisk: 'SAFE' as const },
+  { hptCode: 'GE10002', atcCode: 'A10BA02', genericName: 'Metformin', strength: '500 mg', strengthValue: 500, strengthUnit: 'mg', dosageForm: 'TABLET', route: 'ORAL', packSize: 100, unitOfIssue: 'TABLET' },
+  { hptCode: 'GE10586', atcCode: 'B01AA03', genericName: 'Warfarin', strength: '5 mg', strengthValue: 5, strengthUnit: 'mg', dosageForm: 'TABLET', route: 'ORAL', packSize: 28, unitOfIssue: 'TABLET', pregnancyRisk: 'CONTRAINDICATED' as const },
+  { hptCode: 'GE10403', atcCode: 'M01AE01', genericName: 'Ibuprofen', strength: '400 mg', strengthValue: 400, strengthUnit: 'mg', dosageForm: 'TABLET', route: 'ORAL', packSize: 100, unitOfIssue: 'TABLET' },
+  { hptCode: 'GE10177', atcCode: 'N02BE01', genericName: 'Paracetamol', strength: '500 mg', strengthValue: 500, strengthUnit: 'mg', dosageForm: 'TABLET', route: 'ORAL', packSize: 100, unitOfIssue: 'TABLET' },
+  { hptCode: 'GE12856', atcCode: 'N02AA01', genericName: 'Morphine', strength: '10 mg', strengthValue: 10, strengthUnit: 'mg', dosageForm: 'TABLET', route: 'ORAL', packSize: 30, unitOfIssue: 'TABLET', controlledSchedule: 'SCHEDULE_2' as const },
+  { hptCode: 'GE10012', atcCode: 'C08CA01', genericName: 'Amlodipine', strength: '5 mg', strengthValue: 5, strengthUnit: 'mg', dosageForm: 'TABLET', route: 'ORAL', packSize: 30, unitOfIssue: 'TABLET', brandNames: [] as string[] },
+  { hptCode: 'PH10348', atcCode: 'C08CA01', genericName: 'Amlodipine', strength: '5 mg', strengthValue: 5, strengthUnit: 'mg', dosageForm: 'TABLET', route: 'ORAL', packSize: 30, unitOfIssue: 'TABLET', brandNames: ['Amlodeal'] },
 ];
 
 export async function seedSampleData(prisma: PrismaClient) {
@@ -43,7 +69,18 @@ export async function seedSampleData(prisma: PrismaClient) {
     update: {},
   });
   for (const d of SAMPLE_DRUGS) {
-    await prisma.hptCode.upsert({ where: { code: d.hptCode }, create: { code: d.hptCode, description: `${d.genericName} ${d.strength} (sample)`, release: 'SAMPLE' }, update: {} });
+    const description = HPT_NAMES[d.hptCode]!;
+    await prisma.hptCode.upsert({
+      where: { code: d.hptCode },
+      create: { code: d.hptCode, description, category: d.hptCode.startsWith('GE') ? 'Generic product' : 'Branded product', ppbStatus: 'ACTIVE', release: HPT_RELEASE },
+      update: {},
+    });
+    // A database seeded with the old placeholder codes keeps its drugs (and their history) under the real code.
+    const old = Object.keys(OLD_SAMPLE_CODES).find((k) => OLD_SAMPLE_CODES[k] === d.hptCode)!;
+    if (!(await prisma.drug.findUnique({ where: { hptCode: d.hptCode } })) && (await prisma.drug.findUnique({ where: { hptCode: old } }))) {
+      await prisma.drug.update({ where: { hptCode: old }, data: { hptCode: d.hptCode, brandNames: d.brandNames ?? [] } });
+      await prisma.hptCode.update({ where: { code: old }, data: { retiredInRelease: HPT_RELEASE } });
+    }
     const drug = await prisma.drug.upsert({
       where: { hptCode: d.hptCode },
       create: { ...d, brandNames: d.brandNames ?? [], substitutionGroupId: d.atcCode === 'C08CA01' ? group.id : null },

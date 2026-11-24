@@ -20,6 +20,9 @@ workflow. The brief is in [PROMPT.md](PROMPT.md).
 
 The **PPB HPT code** is the drug identifier in every message between the three
 systems. The **WHO ATC code** travels with it for classification and reporting.
+CliniTrack prescribes by generic, so a formulary drug carries the generic (`GE`)
+code, which is what prescriptions arrive with. A branded product stocked in its
+place gets its own drug with its `PH` code, in the generic's substitution group.
 
 ## Stack
 

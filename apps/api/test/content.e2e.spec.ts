@@ -105,18 +105,18 @@ run('Clinical content end-to-end', () => {
     const file = without(['M01AE01']);
     const dry = await api().post('/api/v1/content/code-sets/atc/import').set(ADMIN).send({ release: 'TEST-ATC-2', mode: 'FULL', csv: file, dryRun: true }).expect(201);
     expect(dry.body.retiredCodes).toEqual(['M01AE01']);
-    expect(dry.body.affectedDrugs).toEqual([expect.objectContaining({ hptCode: 'SAMPLE-HPT-0004', reason: 'ATC code M01AE01 is not in TEST-ATC-2' })]);
+    expect(dry.body.affectedDrugs).toEqual([expect.objectContaining({ hptCode: 'GE10403', reason: 'ATC code M01AE01 is not in TEST-ATC-2' })]);
 
     await api().post('/api/v1/content/code-sets/atc/import').set(ADMIN).send({ release: 'TEST-ATC-2', mode: 'FULL', csv: file }).expect(201);
     expect((await prisma.atcCode.findUnique({ where: { code: 'M01AE01' } }))!.retiredInRelease).toBe('TEST-ATC-2');
     expect((await prisma.atcCode.findUnique({ where: { code: 'A10BA02' } }))!.release).toBe('TEST-ATC-2');
 
     const review = await api().get('/api/v1/content/code-sets/drugs-needing-review').set(PHARM_A).expect(200);
-    expect(review.body.map((d: any) => d.hptCode)).toEqual(['SAMPLE-HPT-0004']);
+    expect(review.body.map((d: any) => d.hptCode)).toEqual(['GE10403']);
 
     // New drugs cannot use a retired code.
     await api().post('/api/v1/formulary/drugs').set(PHARM_A)
-      .send({ hptCode: 'SAMPLE-HPT-0001', atcCode: 'M01AE01', genericName: 'X', strength: '1 mg', dosageForm: 'TABLET', route: 'ORAL', packSize: 1, unitOfIssue: 'TABLET' })
+      .send({ hptCode: 'GE10160', atcCode: 'M01AE01', genericName: 'X', strength: '1 mg', dosageForm: 'TABLET', route: 'ORAL', packSize: 1, unitOfIssue: 'TABLET' })
       .expect((r) => expect([400, 409]).toContain(r.status));
 
     // A later release that lists the code again reinstates it.
@@ -130,17 +130,17 @@ run('Clinical content end-to-end', () => {
 
   it('loads PPB HPT codes and flags drugs whose product PPB has withdrawn', async () => {
     const res = await api().post('/api/v1/content/code-sets/hpt/import').set(ADMIN)
-      .send({ release: 'TEST-HPT-1', csv: csv('HPT Code,Description,Status', 'TEST-HPT-0100,Metformin 1 g tablet,Registered', 'SAMPLE-HPT-0006,Morphine 10 mg tablet,Withdrawn', 'bad code!,x,') })
+      .send({ release: 'TEST-HPT-1', csv: csv('HPT Code,Description,Status', 'TEST-HPT-0100,Metformin 1 g tablet,Registered', 'GE12856,Morphine 10 mg tablet,Withdrawn', 'bad code!,x,') })
       .expect(201);
     expect(res.body).toMatchObject({ created: 1, updated: 1, failed: 1 });
-    expect(res.body.affectedDrugs).toEqual([expect.objectContaining({ hptCode: 'SAMPLE-HPT-0006', reason: 'PPB status of SAMPLE-HPT-0006 is WITHDRAWN' })]);
+    expect(res.body.affectedDrugs).toEqual([expect.objectContaining({ hptCode: 'GE12856', reason: 'PPB status of GE12856 is WITHDRAWN' })]);
     const review = await api().get('/api/v1/content/code-sets/drugs-needing-review').set(PHARM_A).expect(200);
-    expect(review.body.find((d: any) => d.hptCode === 'SAMPLE-HPT-0006').reason).toBe('PPB status WITHDRAWN');
+    expect(review.body.find((d: any) => d.hptCode === 'GE12856').reason).toBe('PPB status WITHDRAWN');
   });
 
   it('keeps an imported rule set as a draft until a second pharmacist approves it', async () => {
     const rules = (severity: string) => csv('atc_a,atc_b,severity,description,management,ref', `C08CA,A10BA,${severity},Test interaction (fixture),Test management,T-1`);
-    const amlodipineMetformin = [{ hptCode: 'SAMPLE-HPT-0007', dose: 5 }, { hptCode: 'SAMPLE-HPT-0002', dose: 500 }];
+    const amlodipineMetformin = [{ hptCode: 'GE10012', dose: 5 }, { hptCode: 'GE10002', dose: 500 }];
     const interactionAlerts = async () => (await check(amlodipineMetformin)).body.alerts.filter((a: any) => a.type === 'INTERACTION');
 
     const badFile = csv('atc_a,atc_b,severity,description', 'C08CA,A11,MAJOR,x', 'C08CA,Q1,MAJOR,x');
@@ -190,53 +190,53 @@ run('Clinical content end-to-end', () => {
   });
 
   it('maps dose-limit rules for one product to the drug by HPT code', async () => {
-    const file = csv('hpt_code,atc,dose_unit,max_single_dose,max_daily_dose,severity', 'SAMPLE-HPT-0002,,mg,100,200,HARD_STOP', 'NOT-A-DRUG,,mg,1,2,');
+    const file = csv('hpt_code,atc,dose_unit,max_single_dose,max_daily_dose,severity', 'GE10002,,mg,100,200,HARD_STOP', 'NOT-A-DRUG,,mg,1,2,');
     const dry = await api().post('/api/v1/content/rule-sets/import').set(PHARM_A).send({ kind: 'DOSE_LIMIT', name: 'Doses', source: 'Test MTC', version: '1', csv: file, dryRun: true }).expect(201);
     expect(dry.body.errors).toEqual([{ line: 3, message: 'No drug with HPT code NOT-A-DRUG in the drug master' }]);
     const ok = await api().post('/api/v1/content/rule-sets/import').set(PHARM_A)
-      .send({ kind: 'DOSE_LIMIT', name: 'Doses', source: 'Test MTC', version: '1', csv: csv('hpt_code,atc,dose_unit,max_single_dose,max_daily_dose,severity', 'SAMPLE-HPT-0002,,mg,100,200,HARD_STOP') })
+      .send({ kind: 'DOSE_LIMIT', name: 'Doses', source: 'Test MTC', version: '1', csv: csv('hpt_code,atc,dose_unit,max_single_dose,max_daily_dose,severity', 'GE10002,,mg,100,200,HARD_STOP') })
       .expect(201);
     await api().post(`/api/v1/content/rule-sets/${ok.body.ruleSet.id}/activate`).set(PHARM_B).expect(201);
-    const alerts = (await check([{ hptCode: 'SAMPLE-HPT-0002', dose: 500 }])).body.alerts;
+    const alerts = (await check([{ hptCode: 'GE10002', dose: 500 }])).body.alerts;
     expect(alerts.some((a: any) => a.type === 'DOSE_LIMIT' && a.severity === 'HARD_STOP')).toBe(true);
     const exported = await api().get(`/api/v1/content/rule-sets/${ok.body.ruleSet.id}/export`).set(PHARM_A).expect(200);
-    expect(exported.text.split('\r\n')[1]).toMatch(/^SAMPLE-HPT-0002,,/);
+    expect(exported.text.split('\r\n')[1]).toMatch(/^GE10002,,/);
   });
 
   it('bulk loads a facility formulary, and a full load removes items not listed', async () => {
     const url = '/api/v1/content/facilities/FAC-2/formulary/import';
     const partial = await api().post(url).set(PHARM_A)
-      .send({ csv: csv('hpt_code,status,approval_required_by,restriction_note', 'SAMPLE-HPT-0001,RESTRICTED,CONSULTANT,Culture-guided', 'SAMPLE-HPT-0002,ACTIVE,,', 'SAMPLE-HPT-0005,RESTRICTED,,', 'UNKNOWN-1,ACTIVE,,') })
+      .send({ csv: csv('hpt_code,status,approval_required_by,restriction_note', 'GE10160,RESTRICTED,CONSULTANT,Culture-guided', 'GE10002,ACTIVE,,', 'GE10177,RESTRICTED,,', 'UNKNOWN-1,ACTIVE,,') })
       .expect(201);
     expect(partial.body).toMatchObject({ created: 2, failed: 2 });
     const exported = await api().get('/api/v1/content/facilities/FAC-2/formulary/export').set(PHARM_A).expect(200);
-    expect(exported.text).toContain('SAMPLE-HPT-0001,RESTRICTED,CONSULTANT,Culture-guided,Amoxicillin');
+    expect(exported.text).toContain('GE10160,RESTRICTED,CONSULTANT,Culture-guided,Amoxicillin');
 
-    const full = csv('hpt_code,status', 'SAMPLE-HPT-0002,NON_FORMULARY');
+    const full = csv('hpt_code,status', 'GE10002,NON_FORMULARY');
     const dry = await api().post(url).set(PHARM_A).send({ csv: full, mode: 'FULL', dryRun: true }).expect(201);
-    expect(dry.body).toMatchObject({ updated: 1, retired: 1, retiredCodes: ['SAMPLE-HPT-0001'] });
+    expect(dry.body).toMatchObject({ updated: 1, retired: 1, retiredCodes: ['GE10160'] });
     await api().post(url).set(PHARM_A).send({ csv: full, mode: 'FULL' }).expect(201);
     const entries = await prisma.facilityFormulary.findMany({ where: { facilityId: 'FAC-2' }, include: { drug: true } });
-    expect(entries.map((e) => [e.drug.hptCode, e.status])).toEqual([['SAMPLE-HPT-0002', 'NON_FORMULARY']]);
+    expect(entries.map((e) => [e.drug.hptCode, e.status])).toEqual([['GE10002', 'NON_FORMULARY']]);
   });
 
   it('bulk creates and updates drugs through the normal versioned path', async () => {
     const file = csv(
       'hpt_code,atc_code,generic_name,strength,dosage_form,route,pack_size,unit_of_issue,pregnancy_risk',
       'TEST-HPT-0100,A10BA02,Metformin,1 g,TABLET,ORAL,60,TABLET,',
-      'SAMPLE-HPT-0005,N02BE01,Paracetamol,500 mg,TABLET,ORAL,1000,TABLET,',
-      'SAMPLE-HPT-0001,J01CA04,Amoxicillin,500 mg,CAPSULE,ORAL,100,CAPSULE,',
+      'GE10177,N02BE01,Paracetamol,500 mg,TABLET,ORAL,1000,TABLET,',
+      'GE10160,J01CA04,Amoxicillin,500 mg,CAPSULE,ORAL,100,CAPSULE,',
       'NOT-LOADED-1,A10BA02,Metformin,1 g,TABLET,ORAL,60,TABLET,',
     );
     const dry = await api().post('/api/v1/content/drugs/import').set(PHARM_A).send({ csv: file, reason: 'Pack size update', dryRun: true }).expect(201);
     expect(dry.body).toMatchObject({ created: 1, updated: 1, unchanged: 1, failed: 1 });
     expect(dry.body.changes).toEqual([
       { line: 2, hptCode: 'TEST-HPT-0100', action: 'create', fields: [] },
-      { line: 3, hptCode: 'SAMPLE-HPT-0005', action: 'update', fields: ['packSize'] },
+      { line: 3, hptCode: 'GE10177', action: 'update', fields: ['packSize'] },
     ]);
 
     await api().post('/api/v1/content/drugs/import').set(PHARM_A).send({ csv: file, reason: 'Pack size update' }).expect(201);
-    const para = await prisma.drug.findUnique({ where: { hptCode: 'SAMPLE-HPT-0005' }, include: { versions: { orderBy: { version: 'desc' } } } });
+    const para = await prisma.drug.findUnique({ where: { hptCode: 'GE10177' }, include: { versions: { orderBy: { version: 'desc' } } } });
     expect(para).toMatchObject({ packSize: 1000, pregnancyRisk: 'UNKNOWN', version: 2 });
     expect(para!.versions[0]).toMatchObject({ reason: 'Pack size update', changedBy: 'u-pharm-a' });
     expect(await prisma.drug.findUnique({ where: { hptCode: 'TEST-HPT-0100' } })).toMatchObject({ genericName: 'Metformin', formularyStatus: 'ACTIVE' });

@@ -40,7 +40,7 @@ test('where the facility allows it, a pharmacist records a consultant override o
   expect((await request.put(`${API}/facilities/FAC-1/profile`, { headers: admin, data: { name: 'Riverside Clinic', allowHardStopOverride: true } })).ok()).toBe(true);
 
   // Ibuprofen with a gastric ulcer: a hard stop the prescriber's consultant already overrode at prescribing.
-  const items = [{ ref: 'L1', hptCode: 'SAMPLE-HPT-0004', atcCode: 'M01AE01', dose: 400, doseUnit: 'mg', frequency: 'TDS', frequencyPerDay: 3, route: 'ORAL', durationDays: 3, quantity: 9 }];
+  const items = [{ ref: 'L1', hptCode: 'GE10403', atcCode: 'M01AE01', dose: 400, doseUnit: 'mg', frequency: 'TDS', frequencyPerDay: 3, route: 'ORAL', durationDays: 3, quantity: 9 }];
   const context = { ageMonths: 480, weightKg: 70, diagnoses: [{ system: 'ICD10', code: 'K25.9' }] };
   const check = await request.post(`${API}/safety/check`, { headers: { 'x-user-id': 'clinitrack', 'x-user-roles': 'SYSTEM', 'x-facility-id': 'FAC-1' }, data: { patientId: 'PAT-HS', facilityId: 'FAC-1', context, items: items.map(({ ref, hptCode, dose, doseUnit, frequencyPerDay, route }) => ({ ref, hptCode, dose, doseUnit, frequencyPerDay, route })) } });
   expect(check.ok()).toBe(true);

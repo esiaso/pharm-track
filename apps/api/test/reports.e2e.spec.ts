@@ -102,22 +102,22 @@ run('Reporting end-to-end', () => {
   }
 
   it('reports consumption with WHO DDDs, as JSON or CSV', async () => {
-    await prescribeAndDispense('DR-1', [item('SAMPLE-HPT-0002', 'A10BA02', 60), item('SAMPLE-HPT-0001', 'J01CA04', 21)]);
+    await prescribeAndDispense('DR-1', [item('GE10002', 'A10BA02', 60), item('GE10160', 'J01CA04', 21)]);
     await app.get(OutboxService).dispatchDue();
     const res = await api().get('/api/v1/reports/consumption?facilityId=FAC-1').set(PHARMACIST).expect(200);
     expect(res.body.map((r: any) => [r.hptCode, r.quantity, r.ddds, r.antimicrobial])).toEqual([
-      ['SAMPLE-HPT-0002', 60, 15, false],
-      ['SAMPLE-HPT-0001', 21, 7, true],
+      ['GE10002', 60, 15, false],
+      ['GE10160', 21, 7, true],
     ]);
     const am = await api().get('/api/v1/reports/antimicrobial-use?facilityId=FAC-1').set(PHARMACIST).expect(200);
     expect(am.body).toEqual([{ atcClass: 'J01CA', quantity: 21, ddds: 7, productsWithoutDdd: 0 }]);
     const csv = await api().get('/api/v1/reports/consumption?facilityId=FAC-1&format=csv').set(PHARMACIST).expect(200);
     expect(csv.headers['content-type']).toMatch(/text\/csv/);
-    expect(csv.text).toContain('SAMPLE-HPT-0001,J01CA04,Amoxicillin,500 mg,CAPSULE,21,0,210,7,yes');
+    expect(csv.text).toContain('GE10160,J01CA04,Amoxicillin,500 mg,CAPSULE,21,0,210,7,yes');
   });
 
   it('computes WHO prescribing indicators per prescriber', async () => {
-    await prescribeAndDispense('DR-2', [item('SAMPLE-HPT-0005', 'N02BE01', 20)]);
+    await prescribeAndDispense('DR-2', [item('GE10177', 'N02BE01', 20)]);
     const res = await api().get('/api/v1/reports/prescribing?facilityId=FAC-1').set(PHARMACIST).expect(200);
     expect(res.body.facility).toMatchObject({ encounters: 2, items: 3, avgMedicinesPerEncounter: 1.5, pctEncountersWithAntibiotic: 50, pctItemsOnFormulary: 100 });
     expect(res.body.prescribers.map((p: any) => [p.prescriberId, p.encounters, p.pctEncountersWithAntibiotic])).toEqual([['DR-1', 1, 100], ['DR-2', 1, 0]]);
@@ -131,7 +131,7 @@ run('Reporting end-to-end', () => {
     await api().post('/api/v1/reports/runs').set(PHARMACIST).send({ kind: 'PHARMACY_RETURN', facilityId: 'FAC-1', period: '2999-01' }).expect(422);
 
     // One line that CliniTrack never accepted.
-    const line = await prisma.dispenseLine.findFirstOrThrow({ where: { hptCode: 'SAMPLE-HPT-0005' } });
+    const line = await prisma.dispenseLine.findFirstOrThrow({ where: { hptCode: 'GE10177' } });
     await prisma.dispenseLine.update({ where: { id: line.id }, data: { billingStatus: 'FAILED' } });
 
     const v1 = await api().post('/api/v1/reports/runs').set(PHARMACIST).send({ kind: 'PHARMACY_RETURN', facilityId: 'FAC-1', period }).expect(201);
@@ -178,17 +178,17 @@ run('Reporting end-to-end', () => {
     const now = Date.now();
     const event = (type: string, at: number) =>
       api().post('/api/v1/integrations/supplytrack/events').set(SYSTEM)
-        .send({ type, occurredAt: new Date(at).toISOString(), payload: { storeId: 'STORE-1', hptCode: 'SAMPLE-HPT-0007', quantity: 0 } })
+        .send({ type, occurredAt: new Date(at).toISOString(), payload: { storeId: 'STORE-1', hptCode: 'GE10012', quantity: 0 } })
         .expect(200);
     await event('stock.out', now - 48 * HOUR);
     await event('stock.out', now - 40 * HOUR); // repeated: still one episode
-    await prescribeAndDispense('DR-1', [item('SAMPLE-HPT-0007', 'C08CA01', 30)], new Date(now - 24 * HOUR), 'PAT-R2');
+    await prescribeAndDispense('DR-1', [item('GE10012', 'C08CA01', 30)], new Date(now - 24 * HOUR), 'PAT-R2');
     await event('stock.restored', now - 12 * HOUR);
-    await prescribeAndDispense('DR-1', [item('SAMPLE-HPT-0007', 'C08CA01', 30)], new Date(now - 6 * HOUR), 'PAT-R3');
+    await prescribeAndDispense('DR-1', [item('GE10012', 'C08CA01', 30)], new Date(now - 6 * HOUR), 'PAT-R3');
 
     const from = new Date(now - 72 * HOUR).toISOString();
     const res = await api().get(`/api/v1/reports/stock-outs?facilityId=FAC-1&from=${from}`).set(PHARMACIST).expect(200);
-    expect(res.body).toEqual([expect.objectContaining({ storeId: 'STORE-1', hptCode: 'SAMPLE-HPT-0007', genericName: 'Amlodipine', episodes: 1, daysOut: 1.5, outAtEnd: false, prescriptionItemsAffected: 1 })]);
+    expect(res.body).toEqual([expect.objectContaining({ storeId: 'STORE-1', hptCode: 'GE10012', genericName: 'Amlodipine', episodes: 1, daysOut: 1.5, outAtEnd: false, prescriptionItemsAffected: 1 })]);
 
     const period = monthOf(new Date(now - 48 * HOUR));
     const r = await api().post('/api/v1/reports/runs').set(PHARMACIST).send({ kind: 'STOCK_OUT', facilityId: 'FAC-1', period }).expect(201);
@@ -202,10 +202,10 @@ run('Reporting end-to-end', () => {
 
   it('queues ADRs for PPB with target dates, exports a batch, and tracks submission and acknowledgement', async () => {
     const serious = await api().post('/api/v1/adrs').set(PHARMACIST)
-      .send({ patientId: 'PAT-R1', hptCode: 'SAMPLE-HPT-0001', onsetDate: new Date().toISOString(), description: 'Generalised rash after second dose', seriousness: 'SERIOUS_HOSPITALISATION' })
+      .send({ patientId: 'PAT-R1', hptCode: 'GE10160', onsetDate: new Date().toISOString(), description: 'Generalised rash after second dose', seriousness: 'SERIOUS_HOSPITALISATION' })
       .expect(201);
     const mild = await api().post('/api/v1/adrs').set(PHARMACIST)
-      .send({ patientId: 'PAT-R1', hptCode: 'SAMPLE-HPT-0002', onsetDate: new Date().toISOString(), description: 'Mild nausea for two days', seriousness: 'NON_SERIOUS' })
+      .send({ patientId: 'PAT-R1', hptCode: 'GE10002', onsetDate: new Date().toISOString(), description: 'Mild nausea for two days', seriousness: 'NON_SERIOUS' })
       .expect(201);
     await prisma.adverseDrugReaction.update({ where: { id: serious.body.id }, data: { reportedAt: new Date(Date.now() - 10 * 24 * HOUR) } });
 
@@ -216,7 +216,7 @@ run('Reporting end-to-end', () => {
 
     const batch = await api().post('/api/v1/reports/adrs/ppb-batch').set(PHARMACIST).send({ adrIds: [serious.body.id, mild.body.id] }).expect(201);
     expect(batch.body.count).toBe(2);
-    expect(batch.body.reports[0]).toMatchObject({ reportType: 'SUSPECTED_ADVERSE_DRUG_REACTION', suspectedDrug: { ppbHptCode: 'SAMPLE-HPT-0001', whoAtcCode: 'J01CA04' } });
+    expect(batch.body.reports[0]).toMatchObject({ reportType: 'SUSPECTED_ADVERSE_DRUG_REACTION', suspectedDrug: { ppbHptCode: 'GE10160', whoAtcCode: 'J01CA04' } });
     expect((await prisma.adverseDrugReaction.findUniqueOrThrow({ where: { id: mild.body.id } })).ppbReportStatus).toBe('EXPORTED');
     await api().post('/api/v1/reports/adrs/ppb-batch').set(PHARMACIST).send({ adrIds: ['nope'] }).expect(404);
 
@@ -229,7 +229,7 @@ run('Reporting end-to-end', () => {
   });
 
   it('searches: exact patient and prescription numbers only, medicines by part of the name', async () => {
-    const rx = await prescribeAndDispense('DR-SEARCH', [item('SAMPLE-HPT-0001', 'J01CA04', 10)], new Date(), 'PAT-S1');
+    const rx = await prescribeAndDispense('DR-SEARCH', [item('GE10160', 'J01CA04', 10)], new Date(), 'PAT-S1');
     const s = (q: string, facilityId = 'FAC-1') => api().get('/api/v1/search').query({ q, facilityId }).set(PHARMACIST).expect(200);
 
     const byPatient = await s('pat-s1');
@@ -242,7 +242,7 @@ run('Reporting end-to-end', () => {
     expect(byRx.body.prescriptions).toEqual([{ externalId: rx.externalId, patientId: 'PAT-S1', status: expect.any(String), orderId: rx.dispenseOrders[0].id }]);
 
     const byName = await s('amoxi');
-    expect(byName.body.drugs.map((d: any) => d.hptCode)).toContain('SAMPLE-HPT-0001');
+    expect(byName.body.drugs.map((d: any) => d.hptCode)).toContain('GE10160');
     expect(byName.body.patients).toEqual([]);
     expect((await s('a')).body).toEqual({ patients: [], prescriptions: [], drugs: [] });
     await api().get('/api/v1/search').query({ q: 'amoxi' }).set(H('SYSTEM', 'clinitrack')).expect(403);
