@@ -16,6 +16,8 @@ export type ImportSummary = {
   retired?: number;
   failed: number;
   errors: RowError[];
+  skipped?: number;
+  skippedRows?: RowError[];
   retiredCodes?: string[];
   affectedDrugs?: AffectedDrug[];
   changes?: { line: number; hptCode: string; action: string; fields: string[] }[];
@@ -51,8 +53,20 @@ export function ImportResult({ r, removedLabel = 'Retired' }: { r: ImportSummary
         {r.unchanged !== undefined && <span><strong>{r.unchanged}</strong> unchanged</span>}
         {r.retired !== undefined && r.mode === 'FULL' && <span><strong>{r.retired}</strong> {removedLabel.toLowerCase()}</span>}
         <span><strong>{r.failed}</strong> problems</span>
+        {!!r.skipped && <span><strong>{r.skipped}</strong> skipped</span>}
       </div>
       <Errors errors={r.errors} failed={r.failed} />
+      {!!r.skippedRows?.length && (
+        <details>
+          <summary>Skipped, not loaded: {r.skipped}{r.skipped && r.skipped > r.skippedRows.length ? ` (first ${r.skippedRows.length} shown)` : ''}</summary>
+          <div className="table-wrap" style={{ maxHeight: 320, overflowY: 'auto' }}>
+            <table>
+              <thead><tr><th>Line</th><th>Why</th></tr></thead>
+              <tbody>{r.skippedRows.map((e, i) => <tr key={i}><td className="mono">{e.line}</td><td>{e.message}</td></tr>)}</tbody>
+            </table>
+          </div>
+        </details>
+      )}
       {!!r.retiredCodes?.length && (
         <details>
           <summary>{removedLabel}: {r.retiredCodes.length}{r.retired && r.retired > r.retiredCodes.length ? ` of ${r.retired}` : ''}</summary>

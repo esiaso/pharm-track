@@ -20,6 +20,8 @@ export interface RowError {
 export interface Parsed<T> {
   rows: (T & { line: number })[];
   errors: RowError[];
+  /** Entries left out on purpose (not errors), e.g. section headings in a FHIR CodeSystem. */
+  skipped?: RowError[];
 }
 
 // ── Column handling ─────────────────────────────────────────────────────────
@@ -197,7 +199,65 @@ const HPT_SPEC: Spec = {
   ppbStatus: col(['ppb_status', 'status', 'registration_status']),
 };
 
+/**
+ * The prefix of a code in the PPB HPT list (as published on the DHA terminology
+ * server) names what it is. Only products are drug identifiers; the building
+ * blocks (active ingredients, dosage forms, routes, units) are not loaded.
+ */
+export const HPT_PRODUCT_CATEGORIES: Record<string, string> = {
+  PH: 'Branded product',
+  GE: 'Generic product',
+  FS: 'Food supplement',
+};
+const HPT_BUILDING_BLOCKS: Record<string, string> = {
+  AC: 'an active ingredient',
+  DF: 'a dosage form',
+  RT: 'a route',
+  UM: 'a unit of measure',
+};
+const HPT_CONCEPT = /^([A-Z]{2})\d+(?:-\d+)?$/;
+
+/**
+ * The PPB HPT list as a FHIR CodeSystem (the DHA terminology server export):
+ * `concept[]` of `{ code, display, active }`, flat. Product codes (PH, GE, FS)
+ * are loaded. Everything else (ingredients, forms, routes and units, the section
+ * headings such as "Catalog", and the odd malformed code) is skipped and
+ * counted, not treated as an error, so a full release of the official file can
+ * load.
+ */
+export function parseHptCodeSystem(text: string): Parsed<HptRow> {
+  let doc: { resourceType?: string; concept?: { code?: unknown; display?: unknown; active?: unknown }[] };
+  try {
+    doc = JSON.parse(text);
+  } catch {
+    return { rows: [], errors: [{ line: 1, message: 'The file is not valid JSON.' }] };
+  }
+  if (doc?.resourceType !== 'CodeSystem' || !Array.isArray(doc.concept))
+    return { rows: [], errors: [{ line: 1, message: 'Expected a FHIR CodeSystem with a concept list.' }] };
+  const rows: (HptRow & { line: number })[] = [];
+  const errors: RowError[] = [];
+  const skipped: RowError[] = [];
+  const blocks: RowError[] = []; // listed after the unexpected entries, which are the ones worth reading
+  const seen = new Set<string>();
+  doc.concept.forEach((c, i) => {
+    const line = i + 1;
+    const raw = typeof c?.code === 'string' ? c.code : '';
+    const code = normaliseHpt(raw);
+    const m = HPT_CONCEPT.exec(code);
+    if (m && HPT_BUILDING_BLOCKS[m[1]!]) return void blocks.push({ line, message: `${code} is ${HPT_BUILDING_BLOCKS[m[1]!]}, not a product` });
+    if (!m || !HPT_PRODUCT_CATEGORIES[m[1]!]) return void skipped.push({ line, message: `"${raw}" is not an HPT product code` });
+    if (seen.has(code)) return void errors.push({ line, message: `${code} appears more than once` });
+    seen.add(code);
+    const description = typeof c.display === 'string' ? c.display.trim() : '';
+    if (!description) return void errors.push({ line, message: `${code} has no description` });
+    rows.push({ line, code, description, category: HPT_PRODUCT_CATEGORIES[m[1]!], ppbStatus: c.active === false ? 'INACTIVE' : 'ACTIVE' });
+  });
+  return { rows, errors, skipped: [...skipped, ...blocks] };
+}
+
+/** The PPB HPT list as CSV, or as the FHIR CodeSystem JSON from the DHA terminology server. */
 export function parseHptCsv(text: string): Parsed<HptRow> {
+  if (text.trimStart().startsWith('{')) return parseHptCodeSystem(text);
   const seen = new Set<string>();
   return read<HptRow>(text, HPT_SPEC, (get) => {
     const code = normaliseHpt(get('code'));

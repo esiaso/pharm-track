@@ -208,6 +208,8 @@ export class ContentService {
       retired: retired.length,
       failed: errors.length,
       errors: errors.slice(0, 500),
+      skipped: parsed.skipped?.length ?? 0,
+      skippedRows: (parsed.skipped ?? []).slice(0, 50),
       retiredCodes: retired.slice(0, LIST_LIMIT),
       affectedDrugs,
     };
@@ -547,7 +549,7 @@ export class ContentService {
 
 // ── helpers ─────────────────────────────────────────────────────────────────
 
-const WITHDRAWN = ['WITHDRAWN', 'CANCELLED', 'SUSPENDED', 'DEREGISTERED'];
+const WITHDRAWN = ['WITHDRAWN', 'CANCELLED', 'SUSPENDED', 'DEREGISTERED', 'INACTIVE'];
 
 const DRUG_FIELDS = [
   'atcCode',

@@ -11,7 +11,7 @@ development, not guidance.
 | Content | Source | Who loads it | Where |
 |---|---|---|---|
 | WHO ATC codes and DDDs | WHO Collaborating Centre for Drug Statistics Methodology (ATC/DDD Index). Check the licence terms for the electronic file. | Administrator | Clinical content → Code sets |
-| PPB HPT codes | Pharmacy and Poisons Board HPT code list (format still to confirm, see ARCHITECTURE.md assumptions) | Administrator | Clinical content → Code sets |
+| PPB HPT codes | Pharmacy and Poisons Board HPT list, as the FHIR CodeSystem JSON from the DHA terminology server (nhts.dha.go.ke, MOH-PPB/HPT) or as CSV | Administrator | Clinical content → Code sets |
 | Drug–drug interactions | The facility's Medicines and Therapeutics Committee (MTC), or a licensed interaction knowledge base exported to CSV | Pharmacist, then a second pharmacist approves | Clinical content → Safety rules |
 | Drug–disease contraindications (ICD-10 / ICD-11) | As above | As above | As above |
 | Dose limits (age, weight, renal, hepatic) | As above, or national guidelines | As above | As above |
@@ -60,6 +60,26 @@ screen has a **Download template** link with the exact columns.
 | `hpt_code` | code, product_code | Required, must match `HPT_CODE_PATTERN` |
 | `description` | product_name, name | Required |
 | `category`, `ppb_status` | status, registration_status | Optional |
+
+The PPB HPT list also loads as published: the FHIR CodeSystem JSON from the DHA
+terminology server (`concept[]` of `code`, `display`, `active`). Only product
+codes are loaded, with the category taken from the prefix:
+
+| Prefix | Category | Loaded |
+|---|---|---|
+| `PH` | Branded product | Yes |
+| `GE` | Generic product | Yes |
+| `FS` | Food supplement | Yes |
+| `AC`, `DF`, `RT`, `UM` | Active ingredient, dosage form, route, unit | No (building blocks, not drug identifiers) |
+
+Section headings ("Catalog", "Routes") and malformed codes (`-1`,
+`PH1724+C23908`) are skipped and listed, not counted as problems, so a full
+release of the official file loads. The release of 16 October 2026 has 31,573
+entries, of which 27,666 are products. That file carries no registration
+status (every code is `active`), so products are stored as `ACTIVE`, and the
+re-coding list cannot flag withdrawn products until PPB's statuses are loaded.
+It has no ATC codes either: each drug still gets its ATC code in the drug
+master.
 
 ## Safety rule sets
 
