@@ -49,6 +49,18 @@ that runs scheduled jobs.
 - **Behind a proxy.** Set `TRUST_PROXY=true` (or a hop count) so client
   addresses and `https` links are right, and set `FHIR_BASE_URL` to the public
   FHIR address.
+- **HTTP hardening.** The API sends `nosniff`, `X-Frame-Options: DENY`,
+  `Referrer-Policy: no-referrer` and `Cache-Control: no-store` on every API
+  response (patient data is never cached), and HSTS in production behind a
+  proxy. JSON bodies are limited to 1 MB, except content imports under
+  `/api/v1/content/` (25 MB). Each caller is limited to `RATE_LIMIT_PER_MINUTE`
+  requests (default 600), counted by their sign-in token, or by address when
+  there is none; over the limit gets `429` with `Retry-After`. The limit is per
+  API process, so also rate-limit at the proxy. The API docs at `/docs` are off
+  in production unless `API_DOCS=true`.
+  The web app sends a Content-Security-Policy that only allows its own origin
+  (plus the SSO server, from `NEXT_PUBLIC_SSO_AUTHORITY` at build time), and
+  refuses to be framed.
 
 ## Production settings
 
@@ -68,6 +80,8 @@ error stops it, and the log lists every problem at once.
 | `FHIR_BASE_URL` | recommended | Public base for FHIR links. |
 | `RETENTION_ENABLED=true` | yes, for the 7-year policy | See [DATA-PROTECTION.md](DATA-PROTECTION.md). |
 | `LABEL_PRINTERS` | for Zebra printing | See below. |
+| `RATE_LIMIT_PER_MINUTE` | no | Requests per minute per caller, default 600; `0` turns it off. |
+| `API_DOCS` | no | `true` serves `/docs` in production (off by default). |
 
 Everything else has sensible defaults; see `apps/api/.env.example`.
 
