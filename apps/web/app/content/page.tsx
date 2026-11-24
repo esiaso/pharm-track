@@ -56,7 +56,7 @@ function useCheckedImport<R>(path: string, body: Record<string, unknown>) {
 }
 
 function FileInput({ onFile, id }: { onFile: (f: File | null) => void; id: string }) {
-  return <input id={id} type="file" accept=".csv,.tsv,.txt,text/csv" onChange={(e) => onFile(e.target.files?.[0] ?? null)} />;
+  return <input id={id} type="file" accept=".csv,.tsv,.txt,.json,text/csv,application/json" onChange={(e) => onFile(e.target.files?.[0] ?? null)} />;
 }
 
 function TemplateLink({ kind }: { kind: string }) {
@@ -227,7 +227,7 @@ function CodeSetsTab() {
         <div className="card stack">
           <h3>Load a code list release</h3>
           <p className="small muted">
-            The WHO ATC/DDD index loads as exported (columns ATC code, ATC level name, DDD, U, Adm.R, Note). A full release marks codes that are no longer listed as retired: existing drugs keep them, but they are flagged for re-coding and cannot be used for new drugs.
+            The WHO ATC/DDD index loads as exported (columns ATC code, ATC level name, DDD, U, Adm.R, Note). The PPB HPT list loads as CSV or as the FHIR CodeSystem JSON from the DHA terminology server; only product codes (PH, GE, FS) are loaded from it. A full release marks codes that are no longer listed as retired: existing drugs keep them, but they are flagged for re-coding and cannot be used for new drugs.
           </p>
           <div className="row">
             <Field label="Code list">
@@ -245,7 +245,7 @@ function CodeSetsTab() {
             </Field>
           </div>
           <div className="row">
-            <Field label="CSV file"><FileInput id="codes-file" onFile={imp.setFile} /></Field>
+            <Field label={system === 'hpt' ? 'CSV or JSON file' : 'CSV file'}><FileInput id="codes-file" onFile={imp.setFile} /></Field>
             <TemplateLink kind={system} />
           </div>
           <div className="row">

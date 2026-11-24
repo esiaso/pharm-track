@@ -180,9 +180,11 @@ full REST surface in [openapi.json](api/openapi.json).
 
 ## Assumptions to confirm
 
-1. **PPB HPT code format.** Validation is permissive (`^[A-Z0-9][A-Z0-9.\-/]{2,31}$`)
-   until the official format is confirmed; set `HPT_CODE_PATTERN`. The real check
-   is that the code exists in the imported HPT list.
+1. **PPB HPT code format.** Confirmed from the PPB list on the DHA terminology
+   server: a two-letter prefix and digits, sometimes with `-1` (`GE10002`,
+   `PH100-1`). Validation stays permissive (`^[A-Z0-9][A-Z0-9.\-/]{2,31}$`) so the
+   sample data still loads; set `HPT_CODE_PATTERN=^(PH|GE|FS)[0-9]+(-[0-9]+)?$`
+   to enforce it. The real check is that the code exists in the imported HPT list.
 2. **PPB ADR export format and deadlines.** `GET /adrs/:id/ppb-export` and the batch
    export (`POST /reports/adrs/ppb-batch`) map to the PPB suspected ADR form fields;
    confirm against PPB's current e-reporting schema (or E2B R3). Submission is still

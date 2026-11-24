@@ -56,6 +56,39 @@ describe('PPB HPT import', () => {
     expect(rows).toEqual([{ line: 2, code: 'ABC-001', description: 'Metformin 500 mg', category: undefined, ppbStatus: 'REGISTERED' }]);
     expect(errors.map((e) => e.line)).toEqual([3, 4, 5]);
   });
+
+  it('reads the FHIR CodeSystem from the DHA terminology server, skipping section headings', () => {
+    const json = JSON.stringify({
+      resourceType: 'CodeSystem',
+      id: 'HPT',
+      concept: [
+        { code: 'Catalog', display: 'Catalog', active: true },
+        { code: '-1', display: 'Vasopril 5 mg Oral Tablet', active: true },
+        { code: 'AC10001', display: 'Metformin', active: true },
+        { code: 'GE10002', display: 'Metformin 500 mg Oral Tablet', active: true },
+        { code: 'PH100-1', display: 'Medistatin 100000 mcg Oral Suspension', active: false },
+        { code: 'GE10002', display: 'Again', active: true },
+        { code: 'FS10010', display: ' ', active: true },
+        { code: 'RT10001', display: 'Buccal', active: true },
+        { code: 'PH1724+C23908', display: 'Broken', active: true },
+      ],
+    });
+    const { rows, errors, skipped } = parseHptCsv(`  ${json}`);
+    expect(rows).toEqual([
+      { line: 4, code: 'GE10002', description: 'Metformin 500 mg Oral Tablet', category: 'Generic product', ppbStatus: 'ACTIVE' },
+      { line: 5, code: 'PH100-1', description: 'Medistatin 100000 mcg Oral Suspension', category: 'Branded product', ppbStatus: 'INACTIVE' },
+    ]);
+    expect(errors).toEqual([{ line: 6, message: 'GE10002 appears more than once' }, { line: 7, message: 'FS10010 has no description' }]);
+    expect(skipped).toEqual([
+      { line: 1, message: '"Catalog" is not an HPT product code' },
+      { line: 2, message: '"-1" is not an HPT product code' },
+      { line: 9, message: '"PH1724+C23908" is not an HPT product code' },
+      { line: 3, message: 'AC10001 is an active ingredient, not a product' },
+      { line: 8, message: 'RT10001 is a route, not a product' },
+    ]);
+    expect(parseHptCsv('{"resourceType":"ValueSet"}').errors[0]!.message).toMatch(/FHIR CodeSystem/);
+    expect(parseHptCsv('{ not json').errors[0]!.message).toMatch(/not valid JSON/);
+  });
 });
 
 describe('safety rule files', () => {
