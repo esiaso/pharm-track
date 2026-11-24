@@ -56,3 +56,13 @@ test('dark mode is remembered', async ({ page }) => {
   await page.reload();
   await expect(html).toHaveAttribute('data-theme', after!);
 });
+
+test('the overview counts refills by status and links to that list', async ({ page }) => {
+  await signIn(page, 'PHARMACIST');
+  await page.goto('/');
+  const overdue = page.locator('.stat-card').filter({ hasText: 'Refills overdue' });
+  await expect(overdue.locator('.stat-value')).toHaveText(/^\d[\d,]*$/);
+  await overdue.getByRole('link').click();
+  await expect(page).toHaveURL(/\/refills\?status=OVERDUE/);
+  await expect(page.getByLabel('Status')).toHaveValue('OVERDUE');
+});

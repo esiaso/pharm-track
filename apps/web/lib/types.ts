@@ -161,3 +161,10 @@ export interface Allergy {
   source: string;
   recordedAt: string;
 }
+
+export interface RefillSummary {
+  facilityId: string | null;
+  counts: Record<'UPCOMING' | 'DUE' | 'OVERDUE' | 'COMPLETED' | 'CANCELLED' | 'EXPIRED', number>;
+  /** Upcoming, due and overdue together. */
+  open: number;
+}

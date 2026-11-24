@@ -5,7 +5,7 @@ import type { ComponentType, SVGProps } from 'react';
 import { IconAlert, IconArrowRight, IconBook, IconCheck, IconClipboard, IconClock, IconPill, IconRepeat, IconUsers } from '../components/Icons';
 import { useApi } from '../lib/api';
 import { useSession } from '../lib/session';
-import type { Drug, QueueOrder, RefillSchedule } from '../lib/types';
+import type { Drug, QueueOrder, RefillSummary } from '../lib/types';
 
 type Icon = ComponentType<SVGProps<SVGSVGElement>>;
 
@@ -30,8 +30,7 @@ export default function Home() {
   const facility = encodeURIComponent(session.facilityId);
   const verify = useApi<QueueOrder[]>(`/dispensing/queue?storeId=${store}&status=PENDING,IN_VERIFICATION`);
   const dispense = useApi<QueueOrder[]>(`/dispensing/queue?storeId=${store}&status=VERIFIED,PARTIALLY_DISPENSED`);
-  const due = useApi<RefillSchedule[]>(`/refills?facilityId=${facility}&status=DUE`);
-  const overdue = useApi<RefillSchedule[]>(`/refills?facilityId=${facility}&status=OVERDUE`);
+  const refills = useApi<RefillSummary>(`/refills/summary?facilityId=${facility}`);
   const drugs = useApi<Drug[]>(`/formulary/drugs?q=&facilityId=${facility}&limit=100`);
 
   const modules: { href: string; title: string; text: string; icon: Icon; tone: string }[] = [
@@ -54,8 +53,8 @@ export default function Home() {
       <div className="stat-grid">
         <Stat icon={IconClipboard} tone="violet" value={count(verify.data)} label="To verify" href="/dispensing" link="Queue" />
         <Stat icon={IconCheck} tone="ok" value={count(dispense.data)} label="Ready to dispense" href="/dispensing" link="Queue" />
-        <Stat icon={IconClock} tone="orange" value={count(due.data)} label="Refills due" href="/refills" link="Refills" />
-        <Stat icon={IconAlert} tone="danger" value={count(overdue.data)} label="Refills overdue" href="/refills" link="Refills" />
+        <Stat icon={IconClock} tone="orange" value={refills.data ? refills.data.counts.DUE.toLocaleString() : '–'} label="Refills due" href="/refills?status=DUE" link="Refills" />
+        <Stat icon={IconAlert} tone="danger" value={refills.data ? refills.data.counts.OVERDUE.toLocaleString() : '–'} label="Refills overdue" href="/refills?status=OVERDUE" link="Refills" />
         <Stat icon={IconBook} tone="info" value={count(drugs.data, 100)} label="Formulary drugs" href="/formulary" link="Formulary" />
       </div>
 

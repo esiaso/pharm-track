@@ -304,6 +304,17 @@ run('PharmTrack end-to-end', () => {
     const first = await api().post(`/api/v1/refills/${schedules[0]!.id}/request`).set(PHARMACIST).send({}).expect(201);
     const second = await api().post(`/api/v1/refills/${schedules[1]!.id}/request`).set(PHARMACIST).send({}).expect(201);
     expect([first.body.fillSequence, second.body.fillSequence]).toEqual([1, 1]);
+
+    // Totals per status, and paging through the open refills without overlap.
+    const sum = await api().get('/api/v1/refills/summary').query({ facilityId: 'FAC-1' }).set(PHARMACIST).expect(200);
+    expect(sum.body.open).toBe(sum.body.counts.UPCOMING + sum.body.counts.DUE + sum.body.counts.OVERDUE);
+    const all = await api().get('/api/v1/refills').query({ facilityId: 'FAC-1' }).set(PHARMACIST).expect(200);
+    expect(all.body).toHaveLength(sum.body.open);
+    const p1 = await api().get('/api/v1/refills').query({ facilityId: 'FAC-1', limit: 1, offset: 0 }).set(PHARMACIST).expect(200);
+    const p2 = await api().get('/api/v1/refills').query({ facilityId: 'FAC-1', limit: 1, offset: 1 }).set(PHARMACIST).expect(200);
+    expect([p1.body[0].id, p2.body[0].id]).toEqual(all.body.slice(0, 2).map((r: { id: string }) => r.id));
+    await api().get('/api/v1/refills').query({ limit: 501 }).set(PHARMACIST).expect(400);
+    await api().get('/api/v1/refills').query({ status: 'LATE' }).set(PHARMACIST).expect(400);
     // A cancelled refill can be requested again.
     await api().post(`/api/v1/dispensing/orders/${first.body.id}/cancel`).set(PHARMACIST).send({ reason: 'Patient did not come' }).expect(200);
     const again = await api().post(`/api/v1/refills/${schedules[0]!.id}/request`).set(PHARMACIST).send({}).expect(201);

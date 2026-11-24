@@ -86,7 +86,10 @@ ran on a 4-core machine with PostgreSQL on the same host.
 - The adherence and controlled-drug reports return 1 to 2 MB for a busy
   facility at their default periods. They are fast enough, but a longer period
   or a whole hospital group would want paging.
-- The refill queues show the first 500. A facility with more than 500 overdue
-  refills needs paging or a narrower filter.
+- ~~The refill queues show the first 500.~~ Fixed. The Refills screen pages
+  100 at a time and shows the total for each status. It can also find one
+  patient's refills. The overview's due and overdue counts come from
+  `GET /refills/summary`, so they are exact, not capped at 500. At FAC-1 that
+  is 6,794 overdue, or 68 pages.
 - These timings are for one user. The API was not tested under many users at
   once, and the rate limit is per API process.
